@@ -6,9 +6,9 @@ name: CMake packaging validation (build + container installation smoke)
 # dedicated smoke jobs; never on the runner, maintainer host, or user's desktop.
 # No PipeWire daemon, DSP backend, or GUI is launched.
 on:
-  push:
+  pull_request:
     branches:
-      - refactor/cmake-modernization
+      - main
   workflow_dispatch:
 
 permissions:
