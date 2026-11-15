@@ -57,6 +57,19 @@ int main() {
     assert(invoke({"off", "--eq", "preset=No such preset"}) == 2);
     assert(c.master_enabled.load() == 1);
 
+    // CLI saves/deletes user EQ presets without overwriting existing names.
+    assert(invoke({"--eq", "save=CLI Curve"}) == 0);
+    s.sync();
+    assert(s.value("eq/user_presets/CLI Curve/bands").toInt() == 15);
+    assert(s.value("eq/user_presets/CLI Curve/levels").toString().split(',').size() == 15);
+    assert(s.value("eq_precision_hundredths").toBool());
+    assert(invoke({"--eq", "save=CLI Curve"}) == 2);
+    assert(invoke({"--eq", "delete=CLI Curve"}) == 0);
+    s.sync();
+    assert(!s.contains("eq/user_presets/CLI Curve/bands"));
+    assert(s.value("eq/selected_preset").toString() == "custom");
+    assert(invoke({"--eq", "delete=CLI Curve"}) == 2);
+    assert(invoke({"--eq", "delete=Flat"}) == 2);
     // User EQ presets are different from GUI's named full-effect snapshots.
     s.setValue("eq/user_presets/My Curve/bands", 10);
     s.setValue("eq/user_presets/My Curve/levels", "0,100,200,300,400,500,400,300,200,100");

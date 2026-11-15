@@ -6,6 +6,7 @@
 #include "gui-backend-exit.h"
 #include "sync/gui-control-channel.h"
 #include "viper-eq-presets.h"
+#include "viper-eq-storage.h"
 #include "widgets/eq-overviews.h"
 #include "widgets/dynamic-eq-editor.h"
 #include "widgets/graphic-eq-editor.h"

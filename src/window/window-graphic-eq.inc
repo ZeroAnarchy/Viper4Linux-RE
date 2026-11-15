@@ -1,32 +1,7 @@
 // Private ViperWindow member definitions. Included once inside the class.
 // Checkpoint 7 mechanical extraction; no additional Qt or DSP state owner.
     void migrateEqPrecision() {
-        // Older masters saved 0.1 dB integers; new native EQ IPC uses 0.01 dB.
-        // Convert settings exactly once, including saved custom EQ presets.
-        if (settings_.value("eq_precision_hundredths", false).toBool()) return;
-        auto convert = [this](const QString& key) {
-            if (!settings_.contains(key)) return;
-            const auto fields = settings_.value(key).toString().split(',');
-            QStringList values;
-            for (const auto& field : fields) {
-                bool ok = false;
-                const int prior = field.trimmed().toInt(&ok);
-                if (!ok) return; // leave malformed user data untouched
-                values << QString::number(std::clamp(prior * 10, -1200, 1200));
-            }
-            settings_.setValue(key, values.join(','));
-        };
-        for (int count : {10, 15, 25, 31}) {
-            convert("eq_levels_" + QString::number(count));
-            convert("preset/eq_levels_" + QString::number(count));
-        }
-        settings_.beginGroup("eq/user_presets");
-        const auto names = settings_.childGroups();
-        settings_.endGroup();
-        for (const auto& name : names)
-            convert("eq/user_presets/" + name + "/levels");
-        settings_.setValue("eq_precision_hundredths", true);
-        settings_.sync();
+        viper_eq_storage::migratePrecision(settings_);
     }
     static QString flatEqCsv(int n) {
         QStringList values;
@@ -117,31 +92,18 @@
     }
     void saveUserEqPreset() {
         bool accepted = false;
-        QString name = QInputDialog::getText(this, "Save EQ preset", "Preset name:",
-                                             QLineEdit::Normal, "", &accepted).trimmed();
+        const QString name = QInputDialog::getText(this, "Save EQ preset", "Preset name:",
+                                                   QLineEdit::Normal, "", &accepted).trimmed();
         if (!accepted || name.isEmpty()) return;
-        if (name.contains('/') || name.contains('\\') || name.size() > 70) {
-            QMessageBox::warning(this, "Invalid preset name",
-                "Use a name of at most 70 characters without slashes.");
+        std::vector<int> levels;
+        levels.reserve(eq_active_bands_);
+        for (int i = 0; i < eq_active_bands_; ++i)
+            levels.push_back(eq_faders_[i]->value());
+        QString error;
+        if (!viper_eq_storage::save(settings_, name, eq_active_bands_, levels, error)) {
+            QMessageBox::warning(this, "Could not save EQ preset", error);
             return;
         }
-        settings_.beginGroup("eq/user_presets");
-        const auto existing = settings_.childGroups();
-        settings_.endGroup();
-        for (const auto& other : existing) {
-            if (other.compare(name, Qt::CaseInsensitive) == 0) {
-                QMessageBox::warning(this, "Preset already exists",
-                    "A saved EQ preset already has that name. Nothing was overwritten.");
-                return;
-            }
-        }
-        QStringList vals;
-        for (int i = 0; i < eq_active_bands_; ++i)
-            vals << QString::number(eq_faders_[i]->value());
-        const QString path = "eq/user_presets/" + name + "/";
-        settings_.setValue(path + "bands", eq_active_bands_);
-        settings_.setValue(path + "levels", vals.join(','));
-        settings_.sync();
         eq_selected_preset_ = "user:" + name;
         populateEqPresets();
     }
@@ -151,7 +113,11 @@
         if (QMessageBox::question(this, "Delete EQ preset",
                 "Delete saved preset '" + name + "'? The current EQ curve will be retained.")
                 != QMessageBox::Yes) return;
-        settings_.remove("eq/user_presets/" + name);
+        QString error;
+        if (!viper_eq_storage::remove(settings_, name, error)) {
+            QMessageBox::warning(this, "Could not delete EQ preset", error);
+            return;
+        }
         eq_selected_preset_ = "custom";
         populateEqPresets();
     }

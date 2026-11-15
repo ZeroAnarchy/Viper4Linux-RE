@@ -70,6 +70,14 @@ int main() {
     assert(!check({"--mb", "crossover=3:5000"}).ok);
     assert(!check({"--mb", "bands=5", "band=2:release:501"}).ok);
     assert(!check({"--mb", "band=1:ratio:3.5", "band=2:attack:0"}).ok);
+    assert(check({"--ddc", "file=/tmp/profile.vdc", "on"}).count == 2);
+    assert(check({"--convolver", "import=/tmp/response.irs",
+                  "cross=50"}).count == 2);
+    assert(!check({"--ddc", "file="}).ok);
+    assert(!check({"--convolver", "import="}).ok);
+    assert(check({"--eq", "save=Studio Reference"}).count == 1);
+    assert(check({"--eq", "delete=user:Studio Reference"}).count == 1);
+    assert(!check({"--eq", "save="}).ok);
     assert(!check({"--limiter", "on"}).ok);
     assert(check({"--limiter", "threshold-db=-6.0", "gain=1"}).count == 2);
     assert(check({"--limiter", "threshold-db=-10.5"}).ok);

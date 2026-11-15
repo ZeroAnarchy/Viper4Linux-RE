@@ -24,8 +24,9 @@ command is a symlink for viper4linux-ctl and accepts identical arguments.
 Effect commands require an active channel; they do not start PipeWire.
 Successful edits are written to the same per-user settings used by the GUI,
 including when the GUI is closed. The GUI also reads the live controls while it
-is open. The CLI can apply existing EQ presets, but creating, overwriting, or
-importing presets and selecting impulse-response files are GUI features.
+is open. The CLI can apply and manage user EQ presets and select or import DDC and
+Convolver correction files. Full named effect-preset management, including
+creating and restoring whole-configuration presets, remains a GUI feature.
 .PP
 Throughout this manual, a range such as "0 through 100" includes both ends.
 A 
@@ -387,6 +388,19 @@ use builtin:NAME or user:NAME to resolve ambiguous names. Custom restores
 the independent saved custom curve for the current band layout (flat
 if it has never been saved). This does not enable the EQ automatically.
 No named presets are overwritten.
+.TP
+.BI "--eq save=" NAME
+Save the current live EQ band levels as a new named user EQ preset. NAME
+must contain 1 through 70 characters and no slashes. Existing names are
+never overwritten, including case-insensitive matches. The selected
+preset becomes user:NAME, and the GUI will show it when open.
+Saving is a standalone operation, not part of a multi-effect batch.
+.TP
+.BI "--eq delete=" NAME
+Delete one existing user EQ preset by name, optionally with the user:
+prefix. Built-in presets cannot be deleted. The active EQ curve is kept,
+and a currently selected deleted preset becomes Custom. This is also
+a standalone operation; the command is the explicit delete request.
 .SS "B. Dynamic EQ"
 .TP
 .B "--deq on | off"
@@ -618,9 +632,20 @@ the batch begins.
 .SS "A. ViPER-DDC"
 .TP
 .B "--ddc on | off"
-Enable or disable ViPER-DDC correction. No arguments. The selected VDC
-profile is managed in the GUI; a valid profile and supported sample rate
-are still required.
+Enable or disable ViPER-DDC correction. No arguments. A valid profile and
+supported sample rate are still required.
+.TP
+.BI "--ddc file=" PATH
+Select an existing readable .vdc profile by filename. Use file=none to
+clear the saved selection. The path is resolved to an absolute canonical
+path; it is not copied into the GUI's library.
+.TP
+.BI "--ddc import=" PATH
+Copy a readable .vdc file into the same VDC library used by the GUI and
+select it. Already imported files are reused; same-name collisions use
+numbered filenames rather than overwriting an existing profile.
+Both file= and import= persist the selection and request the native
+DDC worker to reload, including if the GUI is open.
 .SS "B. Speaker Correction"
 .TP
 .B "--speaker on | off"
@@ -628,8 +653,19 @@ Enable or disable native Speaker Correction. No arguments.
 .SS "C. Convolver"
 .TP
 .B "--convolver on | off"
-Enable or disable the convolver. No arguments. Import and select an IRS
-or supported WAV impulse response in the GUI.
+Enable or disable the convolver. No arguments.
+.TP
+.BI "--convolver file=" PATH
+Select an existing readable .irs or .wav impulse response. Use file=none
+to clear the saved selection. Selecting a file does not copy it.
+.TP
+.BI "--convolver import=" PATH
+Copy a readable .irs or .wav file into the GUI's IRS library, reusing
+a file already there and avoiding same-name overwrites. It becomes the
+selected kernel. As with the GUI, valid format/decoding and sample-rate
+conversion are determined by the native backend worker when loading.
+Selecting or clearing either correction file persists it before notifying
+the worker. A failed import does not alter the previous selection.
 .TP
 .BI "--convolver cross=" VALUE
 Set the percentage of cross-channel convolution mixing. This control is

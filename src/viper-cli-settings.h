@@ -5,6 +5,7 @@
 // GUI state or named presets. Qt handles concurrent QSettings file locking.
 #include "viper-control.h"
 #include "viper-precision-units.h"
+#include "viper-eq-storage.h"
 #include <QSettings>
 #include <algorithm>
 #include <cstdint>
@@ -64,6 +65,7 @@ inline bool persistCliSettings(const std::string& cmd, const Controls& c,
         num("dynamic_side_high_percent", c.dynamic_side_high_percent);
         num("dynamic_strength_percent", c.dynamic_strength_percent);
     } else if (begins("eq-")) {
+        viper_eq_storage::migratePrecision(s);
         flag("eq_enabled", c.eq_enabled);
         const int bands = value(c.eq_band_count);
         s.setValue("eq_band_count", bands);

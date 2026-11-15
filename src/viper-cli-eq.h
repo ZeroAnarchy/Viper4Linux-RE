@@ -3,6 +3,7 @@
 // Only invoked by the short-lived CLI, never a PipeWire RT callback.
 #include "viper-control.h"
 #include "viper-eq-presets.h"
+#include "viper-eq-storage.h"
 #include <QSettings>
 #include <QString>
 #include <QStringList>
@@ -28,6 +29,9 @@ inline QStringList presets(QSettings& settings) {
 inline bool choose(QSettings& s, Controls& c, const QString& requested,
                    std::string& error, bool validateOnly = false, int bandsOverride = -1) {
     s.sync();
+    // GUI performs this at startup; the CLI must also handle older stores
+    // when the GUI has not been launched since the precision migration.
+    if (!validateOnly) viper_eq_storage::migratePrecision(s);
     const QStringList all = presets(s);
     QString selected;
     for (const QString& candidate : all) {
@@ -146,6 +150,7 @@ inline bool switchBands(QSettings& s, Controls& c, int requestedBands,
     if (bands == oldBands) return true; // Selecting the current layout is a no-op.
 
     s.sync();
+    viper_eq_storage::migratePrecision(s);
     const QString preset = s.value("eq/selected_preset", "custom").toString();
     // Verify the target preset before writing the outgoing layout.
     if (!choose(s, c, preset, error, true, bands)) return false;

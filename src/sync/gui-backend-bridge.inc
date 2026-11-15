@@ -245,6 +245,31 @@
         const QSignalBlocker blockEq(eq_enabled_);
         settings_.sync();
         const QString remoteEqPreset = settings_.value("eq/selected_preset", "custom").toString();
+        // CLI save/delete may alter the named EQ choices while the GUI is open.
+        settings_.beginGroup("eq/user_presets");
+        const QStringList savedEqNames = settings_.childGroups();
+        settings_.endGroup();
+        QStringList shownEqNames;
+        for (int i = 0; i < eq_preset_->count(); ++i) {
+            const QString id = eq_preset_->itemData(i).toString();
+            if (id.startsWith("user:")) shownEqNames << id.mid(5);
+        }
+        if (savedEqNames != shownEqNames) {
+            eq_selected_preset_ = remoteEqPreset;
+            populateEqPresets();
+        }
+        // Correction selections are stored in QSettings, not IPC fields.
+        // Follow CLI imports/selections even when the GUI stays open.
+        const QString remoteDdcPath = settings_.value("ddc_profile").toString();
+        if (ddc_file_name_->toolTip() != remoteDdcPath) {
+            updateDdcFileName(remoteDdcPath);
+            refreshDdcLibrary();
+        }
+        const QString remoteIrPath = settings_.value("convolver_kernel").toString();
+        if (convolver_full_name_->toolTip() != remoteIrPath) {
+            updateIrsName(remoteIrPath);
+            refreshIrsLibrary();
+        }
         eq_enabled_->setChecked(c->eq_enabled.load() != 0);
         const int remoteEqBands = validEqBands(c->eq_band_count.load());
         if (remoteEqBands != eq_active_bands_) {

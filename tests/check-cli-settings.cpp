@@ -5,6 +5,8 @@
 #undef main
 #include "mock/cli-eq-ack.h"
 #include <QSettings>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QStringList>
 #include <cassert>
 #include <iostream>
@@ -142,6 +144,48 @@ int main() {
     assert(s.value("mb_x1_hz").toInt() == 600);
     assert(s.value("mb_b2_ratio_tenths").toInt() == 35);
     assert(s.value("mb_b2_release_ms").toInt() == 210);
+    // File options reuse GUI library rules but must stay inside disposable
+    // XDG_DATA_HOME rather than the developer's real IRS/VDC library.
+    QTemporaryDir correctionFixture;
+    assert(correctionFixture.isValid());
+    qputenv("XDG_DATA_HOME", correctionFixture.path().toUtf8());
+    const QString vdc = correctionFixture.filePath("correction.vdc");
+    const QString irs = correctionFixture.filePath("response.irs");
+    {
+        QFile file(vdc);
+        assert(file.open(QIODevice::WriteOnly));
+        assert(file.write("mock-vdc") > 0);
+    }
+    {
+        QFile file(irs);
+        assert(file.open(QIODevice::WriteOnly));
+        assert(file.write("mock-irs") > 0);
+    }
+    const std::string ddcFile = "file=" + vdc.toStdString();
+    const std::string ddcImport = "import=" + vdc.toStdString();
+    const std::string irImport = "import=" + irs.toStdString();
+    const auto ddcBefore = server.get()->ddc_request_serial.load();
+    assert(execute({"--ddc", ddcFile.c_str()}) == 0);
+    s.sync();
+    assert(s.value("ddc_profile").toString() == QFileInfo(vdc).canonicalFilePath());
+    assert(server.get()->ddc_request_serial.load() > ddcBefore);
+    assert(execute({"--ddc", ddcImport.c_str()}) == 0);
+    s.sync();
+    assert(s.value("ddc_profile").toString().startsWith(correctionFixture.path() + "/viper4linux/VDC/"));
+    assert(execute({"--ddc", "file=none"}) == 0);
+    s.sync();
+    assert(!s.contains("ddc_profile"));
+    const auto irBefore = server.get()->convolver_request_serial.load();
+    assert(execute({"--convolver", irImport.c_str()}) == 0);
+    s.sync();
+    assert(s.value("convolver_kernel").toString().startsWith(correctionFixture.path() + "/viper4linux/IRS/"));
+    assert(server.get()->convolver_request_serial.load() > irBefore);
+    assert(execute({"--convolver", "file=none"}) == 0);
+    s.sync();
+    assert(!s.contains("convolver_kernel"));
+    const auto masterBeforeInvalidFile = server.get()->master_enabled.load();
+    assert(execute({"--off", "--ddc", "file=/nonexistent/invalid.vdc"}) == 2);
+    assert(server.get()->master_enabled.load() == masterBeforeInvalidFile);
     const auto before = s.value("psycho_intensity_percent").toInt();
     assert(execute({"--psycho", "intensity=101"}) == 2);
     s.sync();

@@ -3,6 +3,8 @@
 #include "viper-backend-state.h"
 #include "viper-cli-settings.h"
 #include "viper-cli-eq.h"
+#include "viper-eq-storage.h"
+#include "viper-cli-files.h"
 #include "viper-cli-batch.h"
 #include <algorithm>
 #include <atomic>
@@ -77,7 +79,9 @@ void usageEffect(const viperbass::cli_scope::EffectName& effect,
         else if (spec.kind == viperbass::cli_batch::Kind::DeqBands)
             argument = "bands=1..10";
         else if (spec.kind == viperbass::cli_batch::Kind::Name)
-            argument = option + "=NAME";
+            argument = (name == "ddc" || name == "convolver")
+                ? option + (option == "import" ? "=PATH" : "=PATH|none")
+                : option + "=NAME";
         else if (spec.kind == viperbass::cli_batch::Kind::EqBands)
             argument = "bands=10|15|25|31";
         else if (spec.kind == viperbass::cli_batch::Kind::MbBands)
@@ -354,6 +358,27 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
                 return error.find("Could not save") != std::string::npos ? 1 : 2;
             }
         }
+        else if (cmd == "eq-save" && argc == 3) {
+            QSettings settings("ViPERforLinux", "ViPERClean");
+            std::vector<int> levels;
+            const int bands = viper_eq::validBands(c.eq_band_count.load());
+            for (int i = 0; i < bands; ++i)
+                levels.push_back(c.eq_levels_hundredths[i].load());
+            QString saveError;
+            if (!viper_eq_storage::save(settings, QString::fromUtf8(argv[2]),
+                                        bands, levels, saveError)) {
+                std::cerr << "EQ save: " << saveError.toStdString() << '\n';
+                return 2;
+            }
+        }
+        else if (cmd == "eq-delete" && argc == 3) {
+            QSettings settings("ViPERforLinux", "ViPERClean");
+            QString deleteError;
+            if (!viper_eq_storage::remove(settings, QString::fromUtf8(argv[2]), deleteError)) {
+                std::cerr << "EQ delete: " << deleteError.toStdString() << '\n';
+                return 2;
+            }
+        }
         else if (cmd == "bass-on" && argc == 2) c.enabled.store(1);
         else if (cmd == "bass-off" && argc == 2) c.enabled.store(0);
         else if (cmd == "bass-toggle" && argc == 2)
@@ -393,6 +418,28 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
             const auto db = number(argv[3], -12.f, 12.f);
             c.eq_levels_hundredths[static_cast<int>(index)-1].store(static_cast<int>(std::lround(db*100.f)));
             c.eq_request_serial.fetch_add(1, std::memory_order_release);
+        }
+        else if ((cmd == "convolver-file" || cmd == "convolver-import") && argc == 3) {
+            const bool importing = cmd == "convolver-import";
+            const QString requested = QString::fromUtf8(argv[2]);
+            QString selected, fileError;
+            if (!viperbass::cli_files::validate(requested, false, importing, fileError)) {
+                std::cerr << "Convolver: " << fileError.toStdString() << '\n';
+                return 2;
+            }
+            if (!viperbass::cli_files::resolve(requested, false, importing, selected, fileError)) {
+                std::cerr << "Convolver: " << fileError.toStdString() << '\n';
+                return 1;
+            }
+            QSettings saved("ViPERforLinux", "ViPERClean");
+            if (selected.isEmpty()) saved.remove("convolver_kernel");
+            else saved.setValue("convolver_kernel", selected);
+            saved.sync(); // Worker reads the selected filename after notification.
+            if (saved.status() != QSettings::NoError) {
+                std::cerr << "Convolver: could not save selected impulse response.\n";
+                return 1;
+            }
+            c.convolver_request_serial.fetch_add(1, std::memory_order_release);
         }
         else if (cmd == "convolver-on" && argc == 2) c.convolver_enabled.store(1);
         else if (cmd == "convolver-off" && argc == 2) c.convolver_enabled.store(0);
@@ -502,6 +549,28 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
             else if (edit.field == "gain") workerValue(b.makeup_db, c.mb_request_serial, wholeValue);
             else if (edit.field == "attack") workerValue(b.attack_ms, c.mb_request_serial, wholeValue);
             else if (edit.field == "release") workerValue(b.release_ms, c.mb_request_serial, wholeValue);
+        }
+        else if ((cmd == "ddc-file" || cmd == "ddc-import") && argc == 3) {
+            const bool importing = cmd == "ddc-import";
+            const QString requested = QString::fromUtf8(argv[2]);
+            QString selected, fileError;
+            if (!viperbass::cli_files::validate(requested, true, importing, fileError)) {
+                std::cerr << "DDC: " << fileError.toStdString() << '\n';
+                return 2;
+            }
+            if (!viperbass::cli_files::resolve(requested, true, importing, selected, fileError)) {
+                std::cerr << "DDC: " << fileError.toStdString() << '\n';
+                return 1;
+            }
+            QSettings saved("ViPERforLinux", "ViPERClean");
+            if (selected.isEmpty()) saved.remove("ddc_profile");
+            else saved.setValue("ddc_profile", selected);
+            saved.sync(); // Worker reads the selected filename after notification.
+            if (saved.status() != QSettings::NoError) {
+                std::cerr << "DDC: could not save selected profile.\n";
+                return 1;
+            }
+            c.ddc_request_serial.fetch_add(1, std::memory_order_release);
         }
         else if (cmd == "ddc-on" && argc == 2) workerToggle(c.ddc_enabled, c.ddc_request_serial, 1);
         else if (cmd == "ddc-off" && argc == 2) workerToggle(c.ddc_enabled, c.ddc_request_serial, 0);
@@ -626,7 +695,8 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
         std::cerr << "Invalid value: " << e.what() << '\n';
         return 2;
     }
-    if (cmd != "status" && cmd != "eq-preset" && !viperbass::persistCliSettings(cmd, c, modifiedDeqBand)) {
+    if (cmd != "status" && cmd != "eq-preset" && cmd != "eq-save" &&
+        cmd != "eq-delete" && !viperbass::persistCliSettings(cmd, c, modifiedDeqBand)) {
         std::cerr << "Live DSP controls updated, but the saved CLI settings could not be written.\n";
         return 1;
     }
@@ -659,6 +729,59 @@ int main(int argc, char** argv) {
                                   error, deqBands, mbBands)) {
         std::cerr << "Invalid command sequence: " << error << '\n';
         return 2;
+    }
+    // EQ library writes are intentionally standalone. This makes deleting a
+    // saved curve explicit, and avoids accepting a multi-effect batch whose
+    // later preset action would invalidate a previous command's selection.
+    for (const auto& command : commands) {
+        const auto& name = command.args[0];
+        if (name != "eq-save" && name != "eq-delete") continue;
+        if (commands.size() != 1) {
+            std::cerr << "EQ preset save/delete must be standalone commands.\n";
+            return 2;
+        }
+        QSettings settings("ViPERforLinux", "ViPERClean");
+        settings.sync();
+        const QString requested = QString::fromUtf8(command.args[1].c_str()).trimmed();
+        if (requested.isEmpty() || requested.size() > 70 ||
+            requested.contains('/') || requested.contains('\\')) {
+            std::cerr << "EQ preset name must have 1 to 70 characters without slashes.\n";
+            return 2;
+        }
+        settings.beginGroup("eq/user_presets");
+        const QStringList existing = settings.childGroups();
+        settings.endGroup();
+        bool present = false;
+        for (const auto& other : existing) {
+            if (other.compare(requested.startsWith("user:", Qt::CaseInsensitive)
+                    && name == "eq-delete" ? requested.mid(5) : requested,
+                    Qt::CaseInsensitive) == 0) {
+                present = true;
+                break;
+            }
+        }
+        if ((name == "eq-save" && present) ||
+            (name == "eq-delete" && !present)) {
+            std::cerr << (name == "eq-save" ? "User EQ preset already exists.\n"
+                     : "User EQ preset does not exist.\n");
+            return 2;
+        }
+    }
+    // Check every source filename before any effect in a batch is changed.
+    // Library copying and settings I/O remain runtime operations.
+    for (const auto& command : commands) {
+        const auto& name = command.args[0];
+        const bool isDdc = name == "ddc-file" || name == "ddc-import";
+        const bool isConvolver = name == "convolver-file" || name == "convolver-import";
+        if (!isDdc && !isConvolver) continue;
+        QString fileError;
+        const bool importing = name == "ddc-import" || name == "convolver-import";
+        if (!viperbass::cli_files::validate(
+                QString::fromUtf8(command.args[1].c_str()), isDdc,
+                importing, fileError)) {
+            std::cerr << "Invalid correction file: " << fileError.toStdString() << '\n';
+            return 2;
+        }
     }
     if (attached) {
         QSettings settings("ViPERforLinux", "ViPERClean");

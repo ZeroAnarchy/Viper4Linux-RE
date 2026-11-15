@@ -41,6 +41,8 @@ inline constexpr ArgSpec specs[] = {
         {"dynamic-strength",1,Kind::Decimal,"Dynamic System strength (%)",0,100},
         {"eq-bands",1,Kind::EqBands,"Graphic EQ layout (10/15/25/31; restores independent curve or selected preset)",10,31}, {"eq-level",2,Kind::EqLevel,"Band BAND gain in dB (-12 to +12; band is 1-based)",-12,12},
         {"eq-preset",1,Kind::Name,"Apply named EQ preset (quote names with spaces)"},
+        {"eq-save",1,Kind::Name,"Save current EQ as a new user preset; never overwrite"},
+        {"eq-delete",1,Kind::Name,"Delete one existing user EQ preset by name"},
         {"deq-bands",1,Kind::DeqBands,"Dynamic EQ active bands (1 to 10)",1,10},
         {"deq-band",1,Kind::DeqBand,"Dynamic EQ setting INDEX:FIELD:VALUE"},
         {"mb-band",1,Kind::MbBand,"Multiband setting INDEX:FIELD:VALUE"},
@@ -66,6 +68,10 @@ inline constexpr ArgSpec specs[] = {
         {"fet-attack",1,Kind::Whole,"Attack (ms)",1,100}, {"fet-release",1,Kind::Whole,"Release (ms)",5,500},
         {"mb-bands",1,Kind::MbBands,"Compressor band count (3 or 5)",3,5},
         {"convolver-cross",1,Kind::Decimal,"Cross-channel convolution mix (%)",0,100},
+        {"convolver-file",1,Kind::Name,"Select a readable IRS/WAV or none"},
+        {"convolver-import",1,Kind::Name,"Import an IRS/WAV into the library and select it"},
+        {"ddc-file",1,Kind::Name,"Select a readable VDC profile or none"},
+        {"ddc-import",1,Kind::Name,"Import a VDC into the library and select it"},
         {"limiter-threshold",1,Kind::Decimal,"Master limiter threshold: negative/zero dBFS (GUI) or positive linear multiplier",-10.5f,1},
         {"limiter-threshold-db",1,Kind::Decimal,"Master limiter peak threshold (dBFS; matches GUI display)",-10.5f,0},
         {"limiter-gain",1,Kind::Decimal,"Master output gain (1 = unity)",0.01f,2},
@@ -216,7 +222,13 @@ inline std::string expectedForError(const ArgSpec& spec, int eqBands, int deqBan
     if (spec.kind == Kind::EqLevel)
         return "BAND:DB (BAND a whole number from 1 to " + std::to_string(eqBands) +
                "; DB from -12 to +12 dB)";
-    if (spec.kind == Kind::Name) return "a non-empty preset name";
+    if (spec.kind == Kind::Name) {
+        if (command == "convolver-file" || command == "ddc-file")
+            return "readable profile path, or none to clear";
+        if (command == "convolver-import" || command == "ddc-import")
+            return "readable local file path to import";
+        return "a non-empty preset name";
+    }
     if (spec.kind == Kind::DeqBands) return "whole number from 1 to 10";
     if (spec.kind == Kind::DeqBand)
         return "INDEX:FIELD:VALUE; INDEX 1.." + std::to_string(deqBands) +
