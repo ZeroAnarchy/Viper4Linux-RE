@@ -13,6 +13,34 @@
     bool trayAvailable() const {
         return tray_icon_ && QSystemTrayIcon::isSystemTrayAvailable();
     }
+    void rememberWaylandTaskbarMinimize() {
+        if (QGuiApplication::platformName() != QLatin1String("wayland")) return;
+        wayland_taskbar_minimize_requested_ = true;
+        wayland_taskbar_was_maximized_ = isMaximized();
+        wayland_taskbar_saw_inactive_ = false;
+    }
+    bool waylandTaskbarNeedsRestore() const {
+        return QGuiApplication::platformName() == QLatin1String("wayland") &&
+            isVisible() && (wayland_taskbar_minimize_requested_ ||
+                (windowHandle() && !windowHandle()->isExposed()));
+    }
+    void scheduleWaylandStartupMinimizeRetry() {
+        if (!wayland_startup_minimize_pending_ ||
+            wayland_startup_minimize_retry_scheduled_) return;
+        wayland_startup_minimize_retry_scheduled_ = true;
+        QTimer::singleShot(0, this, [this] {
+            wayland_startup_minimize_retry_scheduled_ = false;
+            if (!wayland_startup_minimize_pending_ || !isVisible()) return;
+            wayland_startup_minimize_pending_ = false; // Exactly one retry.
+            QWindow* nativeWindow = windowHandle();
+            if (!nativeWindow || !nativeWindow->isExposed()) return;
+            // QWindow::setWindowStates re-sends xdg_toplevel.set_minimized
+            // even if Qt already considers the QWidget minimized. Preserve
+            // maximization for taskbar restoration when the compositor allows.
+            nativeWindow->setWindowStates(
+                nativeWindow->windowStates() | Qt::WindowMinimized);
+        });
+    }
     // Cinnamon/X11 can re-iconify a window *after* it has been activated.
     // A short quiet period validates that restoration has settled, without
     // delaying the visible restore request or changing ordinary tray toggles.
@@ -54,6 +82,13 @@
         ++x11_taskbar_restore_settle_epoch_;
     }
     void restoreFromTray() {
+        const bool waylandTaskbarRestore = waylandTaskbarNeedsRestore();
+        const bool waylandRestoreMaximized = wayland_taskbar_minimize_requested_
+            ? wayland_taskbar_was_maximized_ : isMaximized();
+        wayland_taskbar_minimize_requested_ = false;
+        wayland_taskbar_saw_inactive_ = false;
+        wayland_startup_minimize_pending_ = false; // Manual restore supersedes startup.
+        startup_tray_fallback_pending_ = false; // Manual restore cancels delayed fallback.
         ++tray_restore_generation_; // Cancel any queued hide from a prior minimize.
         // The window manager can re-iconify a taskbar-minimized X11 window
         // when restore and activation are requested as separate operations.
@@ -63,7 +98,13 @@
         const bool taskbarRestore = isMinimized() && isVisible() &&
             QGuiApplication::platformName() == QLatin1String("xcb");
         cancelX11TaskbarRestore();
-        if (isMinimized()) {
+        if (waylandTaskbarRestore) {
+            // Qt may report the Wayland window as visible and unminimized
+            // after sending xdg_toplevel.set_minimized. Re-show explicitly,
+            // preserving whether it was maximized before the minimize.
+            if (waylandRestoreMaximized) showMaximized();
+            else showNormal();
+        } else if (isMinimized()) {
             force_taskbar_minimize_ = true;
             if (taskbarRestore) {
                 x11_taskbar_restore_pending_ = true;
@@ -82,6 +123,15 @@
         tray_restore_maximized_ = false;
         raise();
         if (!taskbarRestore) activateWindow(); // Active already requested above.
+    }
+    void toggleWindowFromTray() {
+        if (!isVisible() || isMinimized() || waylandTaskbarNeedsRestore()) {
+            restoreFromTray();
+            return;
+        }
+        cancelX11TaskbarRestore();
+        saveUiGeometry();
+        hide();
     }
     // Called only on actual GUI exit, never on hide/minimize.
     bool prepareBackendForGuiExit(const QString& explicitDecision = QString()) {
@@ -213,14 +263,8 @@
         tray_icon_->setToolTip("Viper4Linux — PipeWire effects");
         auto* menu = new QMenu(this);
         auto* showAction = menu->addAction("Show / Hide Window");
-        connect(showAction, &QAction::triggered, this, [this] {
-            if (isVisible() && !isMinimized()) {
-                cancelX11TaskbarRestore();
-                saveUiGeometry();
-                hide();
-            }
-            else restoreFromTray();
-        });
+        connect(showAction, &QAction::triggered, this,
+                [this] { toggleWindowFromTray(); });
         tray_processing_action_ = menu->addAction("Enable Processing");
         tray_processing_action_->setCheckable(true);
         connect(tray_processing_action_, &QAction::triggered, this, [this](bool enabled) {
@@ -249,12 +293,7 @@
                 [this](QSystemTrayIcon::ActivationReason reason) {
             if (reason != QSystemTrayIcon::Trigger && reason != QSystemTrayIcon::DoubleClick)
                 return;
-            if (isVisible() && !isMinimized()) {
-                cancelX11TaskbarRestore();
-                saveUiGeometry();
-                hide();
-            }
-            else restoreFromTray();
+            toggleWindowFromTray();
         });
         tray_icon_->show();
     }
