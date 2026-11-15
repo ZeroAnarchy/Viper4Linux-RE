@@ -13,19 +13,75 @@
     bool trayAvailable() const {
         return tray_icon_ && QSystemTrayIcon::isSystemTrayAvailable();
     }
+    // Cinnamon/X11 can re-iconify a window *after* it has been activated.
+    // A short quiet period validates that restoration has settled, without
+    // delaying the visible restore request or changing ordinary tray toggles.
+    void scheduleX11TaskbarRestoreSettle() {
+        if (!x11_taskbar_restore_pending_) return;
+        const quint64 generation = tray_restore_generation_;
+        const quint64 epoch = ++x11_taskbar_restore_settle_epoch_;
+        QTimer::singleShot(450, this, [this, generation, epoch] {
+            if (!x11_taskbar_restore_pending_ ||
+                generation != tray_restore_generation_ ||
+                epoch != x11_taskbar_restore_settle_epoch_) return;
+            if (isMinimized() && isVisible()) {
+                retryX11TaskbarRestore(generation);
+                return;
+            }
+            x11_taskbar_restore_pending_ = false;
+            if (isVisible() && !isMinimized()) {
+                force_taskbar_minimize_ = false;
+            }
+        });
+    }
+    void retryX11TaskbarRestore(quint64 generation) {
+        if (!x11_taskbar_restore_pending_ ||
+            generation != tray_restore_generation_ || !isVisible() ||
+            !isMinimized()) return;
+        // Do not endlessly fight a window manager that refuses to restore.
+        // In that case leave it on the taskbar rather than hiding it in tray.
+        if (++x11_taskbar_restore_retries_ > 3) {
+            x11_taskbar_restore_pending_ = false;
+            return;
+        }
+        setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+        show();
+        raise();
+        scheduleX11TaskbarRestoreSettle();
+    }
+    void cancelX11TaskbarRestore() {
+        x11_taskbar_restore_pending_ = false;
+        ++x11_taskbar_restore_settle_epoch_;
+    }
     void restoreFromTray() {
-        // Restore the real GUI *before* asking Qt to clear its minimized state.
-        // When minimized-to-tray, we only hid the native window; we did not
-        // mutate its window state while hidden (which confused Cinnamon/X11).
+        ++tray_restore_generation_; // Cancel any queued hide from a prior minimize.
+        // The window manager can re-iconify a taskbar-minimized X11 window
+        // when restore and activation are requested as separate operations.
+        // Qt documents combining both in one window-state request. Keep the
+        // hidden-to-tray path unchanged: never clear its minimized state while
+        // hidden, which previously caused ghost windows on Cinnamon/X11.
+        const bool taskbarRestore = isMinimized() && isVisible() &&
+            QGuiApplication::platformName() == QLatin1String("xcb");
+        cancelX11TaskbarRestore();
         if (isMinimized()) {
-            if (tray_restore_maximized_) showMaximized();
-            else showNormal();
+            force_taskbar_minimize_ = true;
+            if (taskbarRestore) {
+                x11_taskbar_restore_pending_ = true;
+                x11_taskbar_restore_retries_ = 0;
+                setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+                show(); // Qt requires re-showing after setWindowState().
+                scheduleX11TaskbarRestoreSettle();
+            } else if (tray_restore_maximized_) {
+                showMaximized();
+            } else {
+                showNormal();
+            }
         } else if (!isVisible()) {
             show();
         }
         tray_restore_maximized_ = false;
         raise();
-        activateWindow();
+        if (!taskbarRestore) activateWindow(); // Active already requested above.
     }
     // Called only on actual GUI exit, never on hide/minimize.
     bool prepareBackendForGuiExit(const QString& explicitDecision = QString()) {
@@ -158,7 +214,11 @@
         auto* menu = new QMenu(this);
         auto* showAction = menu->addAction("Show / Hide Window");
         connect(showAction, &QAction::triggered, this, [this] {
-            if (isVisible() && !isMinimized()) { saveUiGeometry(); hide(); }
+            if (isVisible() && !isMinimized()) {
+                cancelX11TaskbarRestore();
+                saveUiGeometry();
+                hide();
+            }
             else restoreFromTray();
         });
         tray_processing_action_ = menu->addAction("Enable Processing");
@@ -189,7 +249,11 @@
                 [this](QSystemTrayIcon::ActivationReason reason) {
             if (reason != QSystemTrayIcon::Trigger && reason != QSystemTrayIcon::DoubleClick)
                 return;
-            if (isVisible() && !isMinimized()) { saveUiGeometry(); hide(); }
+            if (isVisible() && !isMinimized()) {
+                cancelX11TaskbarRestore();
+                saveUiGeometry();
+                hide();
+            }
             else restoreFromTray();
         });
         tray_icon_->show();

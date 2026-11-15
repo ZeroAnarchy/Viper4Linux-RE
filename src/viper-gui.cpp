@@ -619,7 +619,6 @@ public:
             // minimize-to-tray preference.
             force_taskbar_minimize_ = true;
             showMinimized();
-            QTimer::singleShot(0, this, [this]{ force_taskbar_minimize_ = false; });
         } else {
             show();
         }
@@ -627,6 +626,7 @@ public:
 protected:
     void closeEvent(QCloseEvent* event) override {
         const QString choice = settings_.value("ui/closeBehavior", "quit").toString();
+        cancelX11TaskbarRestore(); // Explicit close supersedes an in-flight restore.
         if (choice == "tray") {
             saveUiGeometry();
             if (!trayAvailable()) {
@@ -643,7 +643,6 @@ protected:
             event->ignore();
             force_taskbar_minimize_ = true;
             showMinimized();
-            QTimer::singleShot(0, this, [this]{ force_taskbar_minimize_ = false; });
             return;
         }
         // Normal X-to-quit and menu/tray Quit share the same backend choice.
@@ -660,6 +659,28 @@ protected:
         const bool was_maximized = is_state_change &&
             static_cast<QWindowStateChangeEvent*>(event)->oldState().testFlag(Qt::WindowMaximized);
         QMainWindow::changeEvent(event);
+        // Activation is not a sufficient restoration acknowledgment on X11:
+        // Cinnamon may still send a minimized state immediately afterward.
+        // While the explicit taskbar restore is settling, intercept re-iconify
+        // and retry restoration rather than converting it to a tray hide.
+        if (QGuiApplication::platformName() == QLatin1String("xcb") &&
+            x11_taskbar_restore_pending_) {
+            if (is_state_change && isMinimized()) {
+                const quint64 generation = tray_restore_generation_;
+                QTimer::singleShot(0, this, [this, generation] {
+                    retryX11TaskbarRestore(generation);
+                });
+                return;
+            }
+            if ((is_state_change || event->type() == QEvent::ActivationChange) &&
+                isVisible() && !isMinimized()) {
+                scheduleX11TaskbarRestoreSettle();
+            }
+        } else if (QGuiApplication::platformName() == QLatin1String("xcb") &&
+                   event->type() == QEvent::ActivationChange &&
+                   isVisible() && !isMinimized() && isActiveWindow()) {
+            force_taskbar_minimize_ = false;
+        }
         // This handler requires the X11 window-state protocol. Native Wayland
         // cannot notify clients of compositor-side minimization, but an
         // explicitly selected XWayland/xcb GUI can still use this feature.
@@ -669,8 +690,13 @@ protected:
         if (!trayAvailable()) return; // Keep native taskbar behavior without a tray.
         // Deferring until after the WM's minimize event prevents reentrant
         // state changes. Only withdraw the window from the WM; don't remap it.
-        QTimer::singleShot(0, this, [this, was_maximized] {
-            if (!isMinimized() || !isVisible() || !trayAvailable()) return;
+        // A queued hide belongs only to the minimize transition which
+        // scheduled it. Restoring from the tray invalidates older callbacks,
+        // even if Cinnamon has not yet updated the window's minimized state.
+        const quint64 generation = tray_restore_generation_;
+        QTimer::singleShot(0, this, [this, was_maximized, generation] {
+            if (generation != tray_restore_generation_ || force_taskbar_minimize_ ||
+                !isMinimized() || !isVisible() || !trayAvailable()) return;
             tray_restore_maximized_ = was_maximized;
             hide();
         });
@@ -736,6 +762,10 @@ private:
     QProcess* audio_restart_process_{};
     bool force_taskbar_minimize_ = false;
     bool tray_restore_maximized_ = false;
+    quint64 tray_restore_generation_ = 0;
+    bool x11_taskbar_restore_pending_ = false;
+    int x11_taskbar_restore_retries_ = 0;
+    quint64 x11_taskbar_restore_settle_epoch_ = 0;
     QString theme_muted_color_ = "#536a74";
     QProcess* cinnamon_theme_query_{};
     bool cinnamon_theme_known_ = false;
