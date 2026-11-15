@@ -15,12 +15,15 @@ Open **Presets…** from the main window or ☰ menu. The manager supports:
   becomes active. This requires per-output memory to be enabled.
 - **Rename** — update a name without changing the preset file's UUID filename.
 - **Delete** — confirm removal of that saved file only.
-- **Reset Effects to Defaults…** — confirm restoring the application's built-in
-  starting effect settings; Cancel is the default confirmation action.
 
-The built-in reset enables master processing, restores the master limiter to
-its default settings, and disables **all optional effects**, including ViPER
-Bass. It does **not** delete named presets, theme choices, window/tray
+The separate **Reset** button next to **Presets…** in the main-window footer
+restores every effect control to its default value after an explicit warning
+to save the current configuration as a preset first. **Cancel** is the default
+and Escape action, so resetting requires choosing **Reset Effects** deliberately.
+
+The reset enables master processing, restores the master limiter to its default
+settings, and disables **all optional effects**, including ViPER Bass. It also
+restores the parameters of disabled effects to their default values. It does **not** delete named presets, theme choices, window/tray
 settings, or library files. Current active effect settings are saved separately and automatically.
 Saving a named preset is an explicit snapshot, not a change to active playback.
 

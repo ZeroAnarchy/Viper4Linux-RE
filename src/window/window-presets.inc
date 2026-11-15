@@ -199,14 +199,14 @@
             QMessageBox confirm(this);
             confirm.setIcon(QMessageBox::Warning);
             confirm.setWindowTitle("Reset Effect Settings");
-            confirm.setText("Reset all effect settings?");
+            confirm.setText("WARNING: THIS WILL RESET ALL EFFECTS TO THEIR DEFAULT VALUES.");
             confirm.setInformativeText(
-                "This will replace your current effect settings with the application's defaults "
-                "(master processing and limiter at defaults; all optional effects off).\n\n"
-                "Your named presets will not be deleted.");
+                "IF YOU WANT TO BACKUP THE CURRENT CONFIGURATION, "
+                "SAVE AS A PRESET BEFORE CONTINUING.");
             auto* resetButton = confirm.addButton("Reset Effects", QMessageBox::DestructiveRole);
             auto* cancelButton = confirm.addButton(QMessageBox::Cancel);
             confirm.setDefaultButton(qobject_cast<QPushButton*>(cancelButton));
+            confirm.setEscapeButton(cancelButton);
             confirm.exec();
             if (confirm.clickedButton() != resetButton) return;
 
@@ -276,7 +276,6 @@
             [this]() -> QString { return outputMemoryDirectory(); },
             [this]() { updateAudioOutputDisplay(); },
             [this](const QString& path, QString* error) -> bool { return stageNamedPreset(path, error); },
-            [this]() { restoreFromPresetStaging(); },
-            [this]() { resetEffectsWithConfirmation(); }
+            [this]() { restoreFromPresetStaging(); }
         });
     }

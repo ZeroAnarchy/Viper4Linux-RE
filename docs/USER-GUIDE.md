@@ -13,6 +13,11 @@ collapsing a panel does not disable its processing. The **Master Limiter** has n
 Modern Teal or Classic Viper and follows supported desktop light/dark settings.
 The compact **☰ menu** provides Preferences, IRS/VDC library shortcuts,
 backend log, Effect Guide, About, Presets, and Quit GUI.
+The main-window footer has a separate **Reset** button next to **Presets…**.
+Reset restores every effect and slider to its default value, enables Master
+processing, and disables all optional effects. A prominent warning recommends
+saving the current configuration as a preset; **Cancel** is the default action.
+Existing saved presets, GUI preferences, and correction-library files are preserved.
 
 ## Window, tray, and login options
 

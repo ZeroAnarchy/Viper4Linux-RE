@@ -531,10 +531,9 @@ public:
         outputLayout->insertWidget(outputLayout->count() - 1, output_warning_);
 
 
-        // Keep the primary interface small; all named-preset operations and
-        // the guarded defaults reset live together in one manager dialog.
-        // Use the existing actions row: Restart Backend on the left,
-        // Presets on the right. No additional footer height is needed.
+        // Keep named-preset management separate from resetting every DSP setting.
+        // Reuse the existing footer row: Restart Backend on the left,
+        // compact Reset and Presets controls on the right.
         auto* actions = new QHBoxLayout();
         audio_restart_button_ = new QPushButton("Restart Backend", central);
         audio_restart_button_->setObjectName("viperRestartAudioButton");
@@ -545,6 +544,11 @@ public:
         presetsButton->setObjectName("viperNamedPresetsButton");
         presetsButton->setToolTip("Save, load, rename or delete complete effect configurations.");
         actions->addStretch();
+        auto* resetButton = new QPushButton("Reset", central);
+        resetButton->setObjectName("viperResetEffectsButton");
+        resetButton->setToolTip(
+            "Restore every DSP parameter to its default; all optional effects will be disabled.");
+        actions->addWidget(resetButton);
         actions->addWidget(presetsButton);
 
         // The tabs own all remaining vertical space. Keep this faint divider
@@ -564,6 +568,8 @@ public:
         footerControls->addLayout(actions);
         layout->addWidget(tabs_, 1);
         layout->addLayout(footerControls);
+        connect(resetButton, &QPushButton::clicked, this,
+                [this] { resetEffectsWithConfirmation(); });
         connect(presetsButton, &QPushButton::clicked, this, [this]{ showPresetManager(); });
         connect(audio_restart_button_, &QPushButton::clicked, this,
                 [this] { restartAudioEngine(); });

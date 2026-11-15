@@ -29,11 +29,21 @@ for forbidden in ('settings_.clear();', 'settings.clear();',
     assert forbidden not in presets + storage, forbidden
 # Reset requires positive confirmation and cannot erase saved presets.
 dialog = (root / "src/viper-preset-dialog.h").read_text()
-assert "actions.resetEffectsWithConfirmation();" in dialog
+main_window = (root / "src/viper-gui.cpp").read_text()
+assert 'new QPushButton("Reset", central)' in main_window
+assert 'resetButton->setObjectName("viperResetEffectsButton");' in main_window
+assert main_window.index("actions->addWidget(resetButton);") < main_window.index("actions->addWidget(presetsButton);")
+assert 'connect(resetButton, &QPushButton::clicked, this,' in main_window
+assert '[this] { resetEffectsWithConfirmation(); });' in main_window
+assert "resetEffectsWithConfirmation" not in dialog
 start = presets.index("    void resetEffectsWithConfirmation() {")
 end = presets.index("    void showPresetManager()", start)
 reset = presets[start:end]
 assert "confirm.setDefaultButton(qobject_cast<QPushButton*>(cancelButton));" in reset
+assert "confirm.setEscapeButton(cancelButton);" in reset
+assert 'WARNING: THIS WILL RESET ALL EFFECTS TO THEIR DEFAULT VALUES.' in reset
+assert 'IF YOU WANT TO BACKUP THE CURRENT CONFIGURATION,' in reset
+assert 'SAVE AS A PRESET BEFORE CONTINUING.' in reset
 assert "if (confirm.clickedButton() != resetButton) return;" in reset
 assert reset.index("if (confirm.clickedButton() != resetButton) return;") < reset.index("applySettings(")
 assert "settings_.clear()" not in reset

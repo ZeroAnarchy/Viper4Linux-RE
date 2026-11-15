@@ -38,7 +38,6 @@ struct PresetDialogActions {
     std::function<void()> updateAudioOutputDisplay;
     std::function<bool(const QString&, QString*)> stageNamedPreset;
     std::function<void()> restoreFromPresetStaging;
-    std::function<void()> resetEffectsWithConfirmation;
 };
     inline void showPresetManager(QWidget* parent, const PresetDialogActions& actions) {
         QString error;
@@ -72,9 +71,7 @@ struct PresetDialogActions {
         column->addLayout(buttons);
         column->addWidget(assign);
         auto* bottom = new QHBoxLayout();
-        auto* reset = new QPushButton("Reset Effects to Defaults…", &dialog);
         auto* close = new QPushButton("Close", &dialog);
-        bottom->addWidget(reset);
         bottom->addStretch();
         bottom->addWidget(close);
         column->addLayout(bottom);
@@ -284,9 +281,6 @@ struct PresetDialogActions {
             if (!QFile::remove(path))
                 QMessageBox::warning(&dialog, "Delete Failed", "Could not delete preset file.");
             else refresh();
-        });
-        QObject::connect(reset, &QPushButton::clicked, &dialog, [&] {
-            actions.resetEffectsWithConfirmation();
         });
         QObject::connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
         dialog.exec();
