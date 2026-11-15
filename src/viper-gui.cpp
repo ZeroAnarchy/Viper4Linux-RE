@@ -688,7 +688,7 @@ protected:
             showMinimized();
             return;
         }
-        // Normal X-to-quit and menu/tray Quit share the same backend choice.
+        // Close (X) uses the saved backend-exit policy; menu actions specify keep/stop.
         // Ignore this close event: Cancel must leave the window alive.
         event->ignore();
         quitGui();
