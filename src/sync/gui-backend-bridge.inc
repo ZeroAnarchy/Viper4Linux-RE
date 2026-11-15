@@ -289,6 +289,7 @@
                 slider->setValue(std::clamp(c->mb_crossovers_hz[i].load(),80,15000));
             }
         }
+        updateMultibandFrequencyLabels();
         for (int i=0; i<5; ++i) {
             auto& b = mb_bands_[i];
             const auto& src = c->mb_bands[i];
@@ -311,7 +312,49 @@
         }
         fet_enabled_->setChecked(c->fet_enabled.load() != 0);
         deq_enabled_->setChecked(c->deq_enabled.load() != 0);
-        updateDeqOverview();
+        // Mirror CLI Dynamic EQ edits into the editor's local band cache.
+        // Without this step a later unrelated GUI push could write stale bands
+        // back over the worker's current values.
+        const bool editingDeq = deq_editor_ && deq_editor_->isActiveWindow() &&
+            (deq_frequency_->hasFocus() || deq_q_->hasFocus() ||
+             deq_gain_->hasFocus() || deq_threshold_->hasFocus() ||
+             deq_attack_->hasFocus() || deq_release_->hasFocus() ||
+             deq_type_->hasFocus() || deq_table_->hasFocus());
+        if (!editingDeq) {
+            bool changed = false;
+            const int remoteCount = std::clamp(c->deq_band_count.load(), 1, 10);
+            if (remoteCount != deq_active_count_) {
+                deq_active_count_ = remoteCount;
+                const QSignalBlocker countBlock(deq_count_), editorBlock(deq_editor_count_);
+                deq_count_->setValue(remoteCount);
+                deq_editor_count_->setValue(remoteCount);
+                changed = true;
+            }
+            for (int i = 0; i < 10; ++i) {
+                const auto& src = c->deq_bands[i];
+                auto& dst = deq_bands_[i];
+                const QString k = "deq_b" + QString::number(i) + "_";
+                const bool remoteModified = settings_.contains(k + "user_modified")
+                    ? settings_.value(k + "user_modified").toBool()
+                    : settings_.contains(k + "freq");
+                const DeqBand remote{src.frequency_hz.load(), src.q_hundredths.load(),
+                    src.gain_hundredths.load(), src.threshold_tenths.load(),
+                    src.attack_ms.load(), src.release_ms.load(), src.filter_type.load()};
+                if (dst.frequency != remote.frequency || dst.q != remote.q ||
+                    dst.gain != remote.gain || dst.threshold != remote.threshold ||
+                    dst.attack != remote.attack || dst.release != remote.release ||
+                    dst.type != remote.type || deq_user_modified_[i] != remoteModified) {
+                    dst = remote;
+                    deq_user_modified_[i] = remoteModified;
+                    changed = true;
+                }
+            }
+            if (changed) {
+                refreshDeqBandSelector();
+                loadDeqEditorBand(deq_band_select_->currentIndex());
+                updateDeqOverview();
+            }
+        }
         for (const auto& item : std::initializer_list<std::pair<SliderRow,int>>{
             {fet_threshold_, std::clamp(c->fet_threshold_db.load(), -48, 0)},
             {fet_ratio_, std::clamp(c->fet_ratio_tenths.load(), 10, 100)},

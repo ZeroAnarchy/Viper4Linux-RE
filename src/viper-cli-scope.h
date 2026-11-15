@@ -27,8 +27,8 @@ inline const EffectName* findEffect(const std::string& name) noexcept {
     return nullptr;
 }
 inline const char* effectNote(const std::string& name) noexcept {
-    if (name == "deq") return "Configure individual Dynamic EQ bands in the GUI.";
-    if (name == "mb") return "Individual compressor band settings are configured in the GUI.";
+    if (name == "deq") return "Use bands=COUNT, band=INDEX:FIELD:VALUE, or spread.";
+    if (name == "mb") return "Use bands=COUNT, crossover=INDEX:HZ, or band=INDEX:FIELD:VALUE.";
     if (name == "ddc") return "Choose a VDC profile in the GUI; a valid sample rate is required.";
     if (name == "convolver") return "Import and select an IRS or WAV impulse response in the GUI.";
     if (name == "eq") return "Preset names with spaces must be quoted as one argument.";

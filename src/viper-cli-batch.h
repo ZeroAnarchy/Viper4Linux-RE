@@ -18,7 +18,7 @@ struct Command {
     std::vector<std::string> args; // command followed by its own parameters
     int eqBandsAfter = 10;
 };
-enum class Kind { Decimal, Whole, EqBands, MbBands, Name, EqLevel };
+enum class Kind { Decimal, Whole, EqBands, MbBands, Name, EqLevel, DeqBands, DeqBand, MbBand, MbCrossover };
 struct ArgSpec {
     const char* command;
     int count;
@@ -41,6 +41,10 @@ inline constexpr ArgSpec specs[] = {
         {"dynamic-strength",1,Kind::Decimal,"Dynamic System strength (%)",0,100},
         {"eq-bands",1,Kind::EqBands,"Graphic EQ layout (10/15/25/31; restores independent curve or selected preset)",10,31}, {"eq-level",2,Kind::EqLevel,"Band BAND gain in dB (-12 to +12; band is 1-based)",-12,12},
         {"eq-preset",1,Kind::Name,"Apply named EQ preset (quote names with spaces)"},
+        {"deq-bands",1,Kind::DeqBands,"Dynamic EQ active bands (1 to 10)",1,10},
+        {"deq-band",1,Kind::DeqBand,"Dynamic EQ setting INDEX:FIELD:VALUE"},
+        {"mb-band",1,Kind::MbBand,"Multiband setting INDEX:FIELD:VALUE"},
+        {"mb-crossover",1,Kind::MbCrossover,"Multiband crossover INDEX:HZ"},
         {"clarity-gain",1,Kind::Decimal,"Clarity gain (stored to thousandths)",0,4.5f}, {"clarity-mode",1,Kind::Whole,"Clarity mode: 0 Natural, 1 Ozone, 2 XHiFi",0,2},
         {"spectrum-freq",1,Kind::Decimal,"Spectrum reference frequency (Hz)",2200,8200}, {"spectrum-exciter",1,Kind::Decimal,"Harmonic exciter strength",0,6},
         {"tube-model",1,Kind::Whole,"Tube type: 0 12AX7, 1 12AU7, 2 6N1P",0,2}, {"tube-drive",1,Kind::Whole,"Tube drive (%)",0,100},
@@ -58,6 +62,8 @@ inline constexpr ArgSpec specs[] = {
         {"imager-high",1,Kind::Whole,"High-band stereo width (%; 100 unchanged)",0,200}, {"imager-xover-low",1,Kind::Whole,"Low crossover frequency (Hz)",80,400},
         {"imager-xover-high",1,Kind::Whole,"High crossover frequency (Hz)",2000,8000},
         {"fet-threshold",1,Kind::Whole,"Compression threshold (dBFS)",-48,0}, {"fet-ratio",1,Kind::Decimal,"Compression ratio (1:1 to 10:1)",1,10},
+        {"fet-knee",1,Kind::Whole,"Soft knee (dB)",0,12}, {"fet-gain",1,Kind::Whole,"Makeup gain (dB)",0,24},
+        {"fet-attack",1,Kind::Whole,"Attack (ms)",1,100}, {"fet-release",1,Kind::Whole,"Release (ms)",5,500},
         {"mb-bands",1,Kind::MbBands,"Compressor band count (3 or 5)",3,5},
         {"convolver-cross",1,Kind::Decimal,"Cross-channel convolution mix (%)",0,100},
         {"limiter-threshold",1,Kind::Decimal,"Master limiter threshold: negative/zero dBFS (GUI) or positive linear multiplier",-10.5f,1},
@@ -76,7 +82,7 @@ inline const ArgSpec* withArgs(const std::string& cmd) {
 inline bool noArgs(const std::string& cmd) {
     if (cmd == "on" || cmd == "off" || cmd == "all-on" ||
         cmd == "all-off" || cmd == "status" || cmd == "eq-presets" ||
-        cmd == "bass-toggle")
+        cmd == "bass-toggle" || cmd == "deq-spread")
         return true;
     const auto dash = cmd.rfind('-');
     if (dash == std::string::npos) return false;
@@ -92,9 +98,68 @@ inline float decimal(const std::string& text, float low, float high) {
         throw std::invalid_argument("number outside permitted range");
     return value;
 }
-inline void checkValue(const ArgSpec& spec, const Command& cmd, int& eqBands) {
+struct IndexedEdit { int index; std::string field; float value; };
+// Both GUI band editors have seven fields, with the same limits and units.
+inline IndexedEdit indexedEdit(const std::string& text, int count, bool dynamicEq) {
+    const auto a = text.find(':');
+    const auto b = a == std::string::npos ? a : text.find(':', a + 1);
+    if (a == std::string::npos || b == std::string::npos ||
+        a == 0 || b == a + 1 || b + 1 == text.size() ||
+        text.find(':', b + 1) != std::string::npos)
+        throw std::invalid_argument("expected INDEX:FIELD:VALUE");
+    const float idx = decimal(text.substr(0, a), 1, static_cast<float>(count));
+    if (std::trunc(idx) != idx)
+        throw std::invalid_argument("band index must be whole");
+    const std::string field = text.substr(a + 1, b - a - 1);
+    struct Bound { const char* name; float lo, hi; bool whole; };
+    static constexpr Bound deq[] = {
+        {"freq",20,20000,true}, {"q",0.5f,8,false},
+        {"gain",-12,12,false}, {"threshold",-80,0,false},
+        {"attack",1,100,true}, {"release",10,500,true}, {"type",0,2,true}
+    };
+    static constexpr Bound mb[] = {
+        {"enabled",0,1,true}, {"threshold",-48,0,true},
+        {"ratio",1,10,false}, {"knee",0,12,true},
+        {"gain",0,24,true}, {"attack",1,100,true}, {"release",5,500,true}
+    };
+    const auto& bounds = dynamicEq ? deq : mb;
+    for (const auto& item : bounds) {
+        if (field != item.name) continue;
+        const float value = decimal(text.substr(b + 1), item.lo, item.hi);
+        if (item.whole && std::trunc(value) != value)
+            throw std::invalid_argument("expected whole-number field");
+        return {static_cast<int>(idx) - 1, field, value};
+    }
+    throw std::invalid_argument("unknown band field");
+}
+struct CrossoverEdit { int index; int hz; };
+inline CrossoverEdit crossoverEdit(const std::string& text, int count) {
+    const auto colon = text.find(':');
+    if (colon == std::string::npos || colon == 0 || colon + 1 == text.size() ||
+        text.find(':', colon + 1) != std::string::npos)
+        throw std::invalid_argument("expected INDEX:HZ");
+    const float idx = decimal(text.substr(0, colon), 1, static_cast<float>(count - 1));
+    const float hz = decimal(text.substr(colon + 1), 80, 15000);
+    if (std::trunc(idx) != idx || std::trunc(hz) != hz)
+        throw std::invalid_argument("crossover index and Hz must be whole numbers");
+    return {static_cast<int>(idx) - 1, static_cast<int>(hz)};
+}
+inline void checkValue(const ArgSpec& spec, const Command& cmd,
+                       int& eqBands, int& deqBands, int& mbBands) {
     if (spec.kind == Kind::Name) {
         if (cmd.args[1].empty()) throw std::invalid_argument("empty preset name");
+        return;
+    }
+    if (spec.kind == Kind::DeqBand) {
+        (void)indexedEdit(cmd.args[1], deqBands, true);
+        return;
+    }
+    if (spec.kind == Kind::MbBand) {
+        (void)indexedEdit(cmd.args[1], mbBands, false);
+        return;
+    }
+    if (spec.kind == Kind::MbCrossover) {
+        (void)crossoverEdit(cmd.args[1], mbBands);
         return;
     }
     if (spec.kind == Kind::EqLevel) {
@@ -116,8 +181,16 @@ inline void checkValue(const ArgSpec& spec, const Command& cmd, int& eqBands) {
             throw std::invalid_argument("EQ band count must be 10, 15, 25 or 31");
         eqBands = static_cast<int>(value);
     }
-    if (spec.kind == Kind::MbBands && value != 3 && value != 5)
-        throw std::invalid_argument("multiband count must be 3 or 5");
+    if (spec.kind == Kind::DeqBands) {
+        if (std::trunc(value) != value)
+            throw std::invalid_argument("Dynamic EQ band count must be whole");
+        deqBands = static_cast<int>(value);
+    }
+    if (spec.kind == Kind::MbBands) {
+        if (value != 3 && value != 5)
+            throw std::invalid_argument("multiband count must be 3 or 5");
+        mbBands = static_cast<int>(value);
+    }
     if (cmd.args[0] == "field-depth" && value != 0 && value < 200)
         throw std::invalid_argument("field depth must be 0 or 200..950");
 }
@@ -136,7 +209,7 @@ inline std::string optionForError(const Command& cmd) {
 
 // Use the existing validation metadata to show the relevant limit, including
 // special discrete choices and the limiter's two supported units.
-inline std::string expectedForError(const ArgSpec& spec, int eqBands) {
+inline std::string expectedForError(const ArgSpec& spec, int eqBands, int deqBands, int mbBands) {
     const std::string command(spec.command);
     if (spec.kind == Kind::EqBands) return "one of 10, 15, 25 or 31 bands";
     if (spec.kind == Kind::MbBands) return "3 or 5 bands";
@@ -144,6 +217,16 @@ inline std::string expectedForError(const ArgSpec& spec, int eqBands) {
         return "BAND:DB (BAND a whole number from 1 to " + std::to_string(eqBands) +
                "; DB from -12 to +12 dB)";
     if (spec.kind == Kind::Name) return "a non-empty preset name";
+    if (spec.kind == Kind::DeqBands) return "whole number from 1 to 10";
+    if (spec.kind == Kind::DeqBand)
+        return "INDEX:FIELD:VALUE; INDEX 1.." + std::to_string(deqBands) +
+            "; FIELD freq/q/gain/threshold/attack/release/type (GUI bounds)";
+    if (spec.kind == Kind::MbBand)
+        return "INDEX:FIELD:VALUE; INDEX 1.." + std::to_string(mbBands) +
+            "; FIELD enabled/threshold/ratio/knee/gain/attack/release (GUI bounds)";
+    if (spec.kind == Kind::MbCrossover)
+        return "INDEX:HZ; INDEX 1.." + std::to_string(mbBands - 1) +
+            "; HZ whole number 80..15000";
     if (command == "limiter-threshold")
         return "-10.5 to 0 dBFS or 0.3 to 1 linear";
     if (command == "limiter-threshold-db")
@@ -157,11 +240,14 @@ inline std::string expectedForError(const ArgSpec& spec, int eqBands) {
 
 // argv starts at the first command (not at executable name).
 inline bool parseLegacy(const std::vector<std::string>& argv, int currentEqBands,
-                        std::vector<Command>& output, std::string& error) {
+                        std::vector<Command>& output, std::string& error,
+                        int currentDeqBands = 3, int currentMbBands = 3) {
     output.clear();
     const int count = static_cast<int>(argv.size());
     int bands = (currentEqBands == 10 || currentEqBands == 15 ||
                  currentEqBands == 25 || currentEqBands == 31) ? currentEqBands : 10;
+    int deqBands = std::clamp(currentDeqBands, 1, 10);
+    int mbBands = currentMbBands == 5 ? 5 : 3;
     try {
         for (int i = 0; i < count;) {
             Command cmd;
@@ -183,10 +269,10 @@ inline bool parseLegacy(const std::vector<std::string>& argv, int currentEqBands
             for (int j = 0; j < needed; ++j) cmd.args.emplace_back(argv[i++]);
             if (spec) {
                 try {
-                    checkValue(*spec, cmd, bands);
+                    checkValue(*spec, cmd, bands, deqBands, mbBands);
                 } catch (const std::exception&) {
                     error = optionForError(cmd) + "\n  Expected: " +
-                            expectedForError(*spec, bands);
+                            expectedForError(*spec, bands, deqBands, mbBands);
                     output.clear();
                     return false;
                 }
@@ -279,7 +365,8 @@ inline bool normalize(int argc, char* const* argv, std::vector<std::string>& res
         }
         if (!scope.empty() && (word == "on" || word == "off" ||
                                 (scope == "bass" && word == "toggle") ||
-                                (scope == "eq" && word == "presets"))) {
+                                (scope == "eq" && word == "presets") ||
+                                (scope == "deq" && word == "spread"))) {
             result.push_back(scope + "-" + word);
             scopeHasOption = true;
             continue;
@@ -326,12 +413,14 @@ inline bool normalize(int argc, char* const* argv, std::vector<std::string>& res
 }
 
 inline bool parse(int count, char* const* argv, int currentEqBands,
-                  std::vector<Command>& output, std::string& error) {
+                  std::vector<Command>& output, std::string& error,
+                  int currentDeqBands = 3, int currentMbBands = 3) {
     std::vector<std::string> normalized;
     if (!normalize(count, argv, normalized, error)) {
         output.clear();
         return false;
     }
-    return parseLegacy(normalized, currentEqBands, output, error);
+    return parseLegacy(normalized, currentEqBands, output, error,
+                       currentDeqBands, currentMbBands);
 }
 } // namespace viperbass::cli_batch

@@ -12,7 +12,8 @@
 #include <string>
 
 namespace viperbass {
-inline bool persistCliSettings(const std::string& cmd, const Controls& c) {
+inline bool persistCliSettings(const std::string& cmd, const Controls& c,
+                               int modifiedDeqBand = -1) {
     if (cmd == "status") return true; // Never write state during a read-only query.
     QSettings s("ViPERforLinux", "ViPERClean");
     const auto value = [](const std::atomic<std::int32_t>& v) { return v.load(std::memory_order_relaxed); };
@@ -77,6 +78,23 @@ inline bool persistCliSettings(const std::string& cmd, const Controls& c) {
         }
     } else if (begins("deq-")) {
         flag("deq_enabled", c.deq_enabled);
+        num("deq_band_count", c.deq_band_count);
+        const int count = std::clamp(value(c.deq_band_count), 1, 10);
+        for (int i = 0; i < 10; ++i) {
+            const QString key = "deq_b" + QString::number(i) + "_";
+            const auto& b = c.deq_bands[i];
+            s.setValue(key + "freq", value(b.frequency_hz));
+            s.setValue(key + "q", value(b.q_hundredths));
+            s.setValue(key + "gain", value(b.gain_hundredths));
+            s.setValue(key + "threshold", value(b.threshold_tenths));
+            s.setValue(key + "attack", value(b.attack_ms));
+            s.setValue(key + "release", value(b.release_ms));
+            s.setValue(key + "type", value(b.filter_type));
+            if (cmd == "deq-band" && i == modifiedDeqBand)
+                s.setValue(key + "user_modified", true);
+            if (cmd == "deq-spread" && i < count)
+                s.setValue(key + "user_modified", false);
+        }
     } else if (begins("clarity-")) {
         flag("clarity_enabled", c.clarity_enabled);
         num("clarity_mode", c.clarity_mode);
@@ -128,9 +146,26 @@ inline bool persistCliSettings(const std::string& cmd, const Controls& c) {
         flag("fet_enabled", c.fet_enabled);
         num("fet_threshold_db", c.fet_threshold_db);
         num("fet_ratio_tenths", c.fet_ratio_tenths);
+        num("fet_knee_db", c.fet_knee_db);
+        num("fet_makeup_db", c.fet_makeup_db);
+        num("fet_attack_ms", c.fet_attack_ms);
+        num("fet_release_ms", c.fet_release_ms);
     } else if (begins("mb-")) {
         flag("mb_enabled", c.mb_enabled);
         num("mb_band_count", c.mb_band_count);
+        for (int i = 0; i < 4; ++i)
+            s.setValue(QString("mb_x%1_hz").arg(i), value(c.mb_crossovers_hz[i]));
+        for (int i = 0; i < 5; ++i) {
+            const QString key = QString("mb_b%1_").arg(i);
+            const auto& b = c.mb_bands[i];
+            s.setValue(key + "enabled", value(b.enabled) != 0);
+            s.setValue(key + "threshold_db", value(b.threshold_db));
+            s.setValue(key + "ratio_tenths", value(b.ratio_tenths));
+            s.setValue(key + "knee_db", value(b.knee_db));
+            s.setValue(key + "makeup_db", value(b.makeup_db));
+            s.setValue(key + "attack_ms", value(b.attack_ms));
+            s.setValue(key + "release_ms", value(b.release_ms));
+        }
     } else if (begins("ddc-")) {
         flag("ddc_enabled", c.ddc_enabled);
     } else if (begins("speaker-")) {

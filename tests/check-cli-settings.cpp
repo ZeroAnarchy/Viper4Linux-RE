@@ -117,6 +117,31 @@ int main() {
     assert(execute({"--imager", "xover-high=6000"}) == 0);
     s.sync();
     assert(s.value("imager_high_crossover_hz").toInt() == 6000);
+    assert(execute({"--fet", "knee=8", "gain=5",
+                    "attack=30", "release=160"}) == 0);
+    s.sync();
+    assert(s.value("fet_knee_db").toInt() == 8);
+    assert(s.value("fet_makeup_db").toInt() == 5);
+    assert(s.value("fet_attack_ms").toInt() == 30);
+    assert(s.value("fet_release_ms").toInt() == 160);
+    assert(execute({"--deq", "bands=5", "band=3:gain:2.75",
+                    "band=3:freq:515"}) == 0);
+    s.sync();
+    assert(s.value("deq_band_count").toInt() == 5);
+    assert(s.value("deq_b2_gain").toInt() == 275);
+    assert(s.value("deq_b2_freq").toInt() == 515);
+    assert(s.value("deq_b2_user_modified").toBool());
+    assert(execute({"--deq", "spread"}) == 0);
+    s.sync();
+    assert(!s.value("deq_b2_user_modified").toBool());
+    assert(s.value("deq_b2_gain").toInt() == 275);
+    assert(execute({"--mb", "bands=5", "crossover=2:600",
+                    "band=3:ratio:3.5", "band=3:release:210"}) == 0);
+    s.sync();
+    assert(s.value("mb_band_count").toInt() == 5);
+    assert(s.value("mb_x1_hz").toInt() == 600);
+    assert(s.value("mb_b2_ratio_tenths").toInt() == 35);
+    assert(s.value("mb_b2_release_ms").toInt() == 210);
     const auto before = s.value("psycho_intensity_percent").toInt();
     assert(execute({"--psycho", "intensity=101"}) == 2);
     s.sync();

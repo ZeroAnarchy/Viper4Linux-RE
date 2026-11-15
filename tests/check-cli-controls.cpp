@@ -89,6 +89,48 @@ int main() {
     assert(c.strength_centi.load() == 235);
     assert(c.frequency_hz.load() == 73);
 
+    // Every FET panel parameter is controllable, persisted, and worker-notified.
+    const auto fetBefore = c.fet_request_serial.load();
+    assert(invoke({"--fet", "on", "threshold=-22", "ratio=3.5",
+                   "knee=9", "gain=7", "attack=22", "release=180"}) == 0);
+    assert(c.fet_enabled.load() == 1 && c.fet_threshold_db.load() == -22);
+    assert(c.fet_ratio_tenths.load() == 35 && c.fet_knee_db.load() == 9);
+    assert(c.fet_makeup_db.load() == 7 && c.fet_attack_ms.load() == 22);
+    assert(c.fet_release_ms.load() == 180 && c.fet_request_serial.load() > fetBefore);
+    assert(invoke({"--fet", "gain=25", "attack=19"}) == 2);
+    assert(c.fet_makeup_db.load() == 7 && c.fet_attack_ms.load() == 22);
+
+    // Live controls and worker serials for independent Dynamic EQ bands.
+    const auto deqBefore = c.deq_request_serial.load();
+    assert(invoke({"--deq", "bands=5", "band=2:freq:315",
+                   "band=2:q:2.25", "band=2:gain:-1.5",
+                   "band=2:threshold:-30.5", "band=2:attack:20",
+                   "band=2:release:180", "band=2:type:1"}) == 0);
+    const auto& deq = c.deq_bands[1];
+    assert(c.deq_band_count.load() == 5 && deq.frequency_hz.load() == 315);
+    assert(deq.q_hundredths.load() == 225 && deq.gain_hundredths.load() == -150);
+    assert(deq.threshold_tenths.load() == -305 && deq.attack_ms.load() == 20);
+    assert(deq.release_ms.load() == 180 && deq.filter_type.load() == 1);
+    assert(c.deq_request_serial.load() > deqBefore);
+    assert(invoke({"--deq", "spread"}) == 0);
+    assert(deq.frequency_hz.load() == 125);
+    assert(deq.gain_hundredths.load() == -150 && deq.q_hundredths.load() == 225);
+    assert(invoke({"--deq", "band=6:gain:1"}) == 2);
+
+    // Per-band Multiband controls follow GUI units and request worker updates.
+    const auto mbBefore = c.mb_request_serial.load();
+    assert(invoke({"--mb", "bands=5", "crossover=2:500",
+                   "band=3:enabled:0", "band=3:threshold:-30",
+                   "band=3:ratio:3.5", "band=3:knee:7",
+                   "band=3:gain:4", "band=3:attack:25",
+                   "band=3:release:160"}) == 0);
+    const auto& mb = c.mb_bands[2];
+    assert(c.mb_band_count.load() == 5 && c.mb_crossovers_hz[1].load() == 500);
+    assert(mb.enabled.load() == 0 && mb.threshold_db.load() == -30);
+    assert(mb.ratio_tenths.load() == 35 && mb.knee_db.load() == 7);
+    assert(mb.makeup_db.load() == 4 && mb.attack_ms.load() == 25);
+    assert(mb.release_ms.load() == 160 && c.mb_request_serial.load() > mbBefore);
+    assert(invoke({"--mb", "band=6:ratio:3"}) == 2);
     // Validate complete multi-command sequences before executing any part.
     c.master_enabled.store(0);
     c.enabled.store(0);

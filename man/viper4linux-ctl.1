@@ -390,8 +390,27 @@ No named presets are overwritten.
 .SS "B. Dynamic EQ"
 .TP
 .B "--deq on | off"
-Enable or disable Dynamic EQ. No arguments. Configure individual Dynamic EQ
-bands in the GUI.
+Enable or disable Dynamic EQ. No arguments.
+.TP
+.BI "--deq bands=" COUNT
+Set active Dynamic EQ band count to a whole number from 1 through 10.
+Changing the count preserves manually edited band frequencies. Unmodified
+bands receive the same default center frequencies used by the GUI.
+.TP
+.BI "--deq band=" INDEX:FIELD:VALUE
+Edit one active band using a 1-based INDEX and FIELD name. Available fields:
+freq (20..20000 Hz, whole); q (0.5..8.0); gain (-12..12 dB);
+threshold (-80..0 dB); attack (1..100 ms, whole);
+release (10..500 ms, whole); type (0 Peak, 1 Low shelf, 2 High shelf).
+The Q and gain values are stored to hundredths; threshold to tenths.
+Editing a band marks it manually configured so changing band count does not
+silently replace its frequency. Example:
+.B v4l-cli --deq bands=5 band=2:freq:250 band=2:gain:2.5
+.TP
+.B "--deq spread"
+Distribute active band frequencies across the frequency range using the
+GUI's default centers, retaining each band's Q, gain, threshold, attack,
+release and filter type. Clears frequency-manual markers on active bands.
 .SS "C. ViPER Clarity"
 .TP
 .B "--clarity on | off"
@@ -560,6 +579,18 @@ inclusive; fractional values are rejected.
 .BI "--fet ratio=" VALUE
 Set FET compression ratio. VALUE accepts decimals from 1 through 10
 inclusive, stored in tenths, representing ratios from 1:1 through 10:1.
+.TP
+.BI "--fet knee=" VALUE
+Set soft knee in whole dB from 0 through 12.
+.TP
+.BI "--fet gain=" VALUE
+Set makeup gain in whole dB from 0 through 24.
+.TP
+.BI "--fet attack=" VALUE
+Set attack time in whole milliseconds from 1 through 100.
+.TP
+.BI "--fet release=" VALUE
+Set release time in whole milliseconds from 5 through 500.
 .SS "B. Multiband Compressor"
 .TP
 .B "--mb on | off"
@@ -567,8 +598,22 @@ Enable or disable Multiband Compressor. No arguments.
 .TP
 .BI "--mb bands=" COUNT
 Set multiband count. COUNT must be the whole number 3 or 5; fractional
-values and other whole numbers are rejected. Configure individual band
-parameters in the GUI.
+values and other whole numbers are rejected.
+.TP
+.BI "--mb crossover=" INDEX:HZ
+Set one crossover boundary using a 1-based INDEX from 1 through the active
+band count minus one, and a whole frequency from 80 through 15000 Hz.
+.TP
+.BI "--mb band=" INDEX:FIELD:VALUE
+Edit one compressor band using a 1-based INDEX from 1 through the current
+3 or 5 active bands. FIELD may be enabled (0 or 1), threshold (-48..0
+dBFS, whole), ratio (1..10, stored in tenths), knee (0..12 dB, whole),
+gain (0..24 dB, whole), attack (1..100 ms, whole), or release
+(5..500 ms, whole). Example:
+.B v4l-cli --mb bands=5 crossover=2:500 band=3:ratio:3.5
+The GUI and CLI use the same stored settings and native worker request
+serials. Invalid indexed values anywhere in a batch are rejected before
+the batch begins.
 .SH "6. SOUND CORRECTION"
 .SS "A. ViPER-DDC"
 .TP

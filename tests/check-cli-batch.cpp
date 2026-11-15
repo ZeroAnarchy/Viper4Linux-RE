@@ -50,6 +50,26 @@ int main() {
     assert(invalidEqBand.error.find("--eq level=16:1") != std::string::npos);
     assert(invalidEqBand.error.find("1 to 15") != std::string::npos);
     assert(!check({"--eq", "level=3"}).ok);
+    assert(check({"--fet", "knee=6", "gain=12", "attack=10",
+                  "release=200"}).count == 4);
+    assert(!check({"--fet", "knee=13"}).ok);
+    assert(!check({"--fet", "gain=5.5"}).ok);
+    assert(!check({"--fet", "release=4"}).ok);
+    // Dynamic EQ and Multiband expose every per-band GUI field, with
+    // count-sensitive indices rejected during full-batch preflight.
+    assert(check({"--deq", "bands=5", "band=5:freq:16000",
+                  "band=2:q:2.35", "band=2:gain:-1.25", "spread"}).count == 5);
+    assert(!check({"--deq", "band=4:freq:1000"}).ok);
+    assert(!check({"--deq", "bands=4", "band=5:gain:2"}).ok);
+    assert(!check({"--deq", "band=2:q:8.1"}).ok);
+    assert(!check({"--deq", "band=1:type:1.5"}).ok);
+    assert(!check({"--deq", "band=1:unknown:2"}).ok);
+    assert(check({"--mb", "bands=5", "crossover=4:8000",
+                  "band=5:enabled:0", "band=3:ratio:3.5"}).count == 4);
+    assert(!check({"--mb", "band=4:gain:5"}).ok);
+    assert(!check({"--mb", "crossover=3:5000"}).ok);
+    assert(!check({"--mb", "bands=5", "band=2:release:501"}).ok);
+    assert(!check({"--mb", "band=1:ratio:3.5", "band=2:attack:0"}).ok);
     assert(!check({"--limiter", "on"}).ok);
     assert(check({"--limiter", "threshold-db=-6.0", "gain=1"}).count == 2);
     assert(check({"--limiter", "threshold-db=-10.5"}).ok);

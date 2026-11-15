@@ -59,6 +59,8 @@ void usageEffect(const viperbass::cli_scope::EffectName& effect,
         out << "  toggle                          Toggle Bass on/off\n";
     if (name == "eq")
         out << "  presets                         List available EQ presets\n";
+    if (name == "deq")
+        out << "  spread                          Spread active band frequencies (preserve other fields)\n";
     for (const auto& spec : viperbass::cli_batch::specs) {
         const std::string command = spec.command;
         const std::string prefix = name + "-";
@@ -67,6 +69,13 @@ void usageEffect(const viperbass::cli_scope::EffectName& effect,
         std::string argument;
         if (spec.kind == viperbass::cli_batch::Kind::EqLevel)
             argument = "level=BAND:DB";
+        else if (spec.kind == viperbass::cli_batch::Kind::DeqBand ||
+                 spec.kind == viperbass::cli_batch::Kind::MbBand)
+            argument = "band=INDEX:FIELD:VALUE";
+        else if (spec.kind == viperbass::cli_batch::Kind::MbCrossover)
+            argument = "crossover=INDEX:HZ";
+        else if (spec.kind == viperbass::cli_batch::Kind::DeqBands)
+            argument = "bands=1..10";
         else if (spec.kind == viperbass::cli_batch::Kind::Name)
             argument = option + "=NAME";
         else if (spec.kind == viperbass::cli_batch::Kind::EqBands)
@@ -319,6 +328,7 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
     }
     auto& c = *mapping.get();
     const std::string cmd(argv[1]);
+    int modifiedDeqBand = -1;
     try {
         if (cmd == "status") {
             const bool selected = argc >= 3 &&
@@ -393,6 +403,53 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
         // leave their current filters unchanged until an unrelated GUI edit.
         else if (cmd == "deq-on" && argc == 2) workerToggle(c.deq_enabled, c.deq_request_serial, 1);
         else if (cmd == "deq-off" && argc == 2) workerToggle(c.deq_enabled, c.deq_request_serial, 0);
+        else if (cmd == "deq-bands" && argc == 3) {
+            const int count = whole(argv[2], 1, 10);
+            QSettings saved("ViPERforLinux", "ViPERClean");
+            saved.sync();
+            // Match GUI's explicit/manual frequency policy when changing count.
+            for (int i = 0; i < count; ++i) {
+                const QString k = "deq_b" + QString::number(i) + "_";
+                const bool modified = saved.contains(k + "user_modified")
+                    ? saved.value(k + "user_modified").toBool()
+                    : saved.contains(k + "freq"); // Legacy manual values.
+                if (!modified && count != c.deq_band_count.load()) {
+                    static constexpr int centers[] = {31,62,125,250,500,1000,2000,4000,8000,16000};
+                    const int frequency = count == 1 ? 1000 :
+                        count == 2 ? (i == 0 ? 125 : 8000) :
+                        count == 3 ? (i == 0 ? 100 : i == 1 ? 1000 : 8000) :
+                        centers[std::clamp(static_cast<int>(std::lround(i * 9.0 / (count - 1))), 0, 9)];
+                    c.deq_bands[i].frequency_hz.store(frequency);
+                }
+            }
+            workerValue(c.deq_band_count, c.deq_request_serial, count);
+        }
+        else if (cmd == "deq-band" && argc == 3) {
+            const auto edit = viperbass::cli_batch::indexedEdit(
+                argv[2], std::clamp(c.deq_band_count.load(), 1, 10), true);
+            modifiedDeqBand = edit.index;
+            auto& b = c.deq_bands[edit.index];
+            const int wholeValue = static_cast<int>(std::lround(edit.value));
+            if (edit.field == "freq") workerValue(b.frequency_hz, c.deq_request_serial, wholeValue);
+            else if (edit.field == "q") workerValue(b.q_hundredths, c.deq_request_serial, static_cast<int>(std::lround(edit.value * 100)));
+            else if (edit.field == "gain") workerValue(b.gain_hundredths, c.deq_request_serial, static_cast<int>(std::lround(edit.value * 100)));
+            else if (edit.field == "threshold") workerValue(b.threshold_tenths, c.deq_request_serial, static_cast<int>(std::lround(edit.value * 10)));
+            else if (edit.field == "attack") workerValue(b.attack_ms, c.deq_request_serial, wholeValue);
+            else if (edit.field == "release") workerValue(b.release_ms, c.deq_request_serial, wholeValue);
+            else if (edit.field == "type") workerValue(b.filter_type, c.deq_request_serial, wholeValue);
+        }
+        else if (cmd == "deq-spread" && argc == 2) {
+            static constexpr int centers[] = {31,62,125,250,500,1000,2000,4000,8000,16000};
+            const int count = std::clamp(c.deq_band_count.load(), 1, 10);
+            for (int i = 0; i < count; ++i) {
+                const int frequency = count == 1 ? 1000 :
+                    count == 2 ? (i == 0 ? 125 : 8000) :
+                    count == 3 ? (i == 0 ? 100 : i == 1 ? 1000 : 8000) :
+                    centers[std::clamp(static_cast<int>(std::lround(i * 9.0 / (count - 1))), 0, 9)];
+                c.deq_bands[i].frequency_hz.store(frequency);
+            }
+            c.deq_request_serial.fetch_add(1, std::memory_order_release);
+        }
         else if (cmd == "tube-on" && argc == 2) workerToggle(c.tube_enabled, c.tube_request_serial, 1);
         else if (cmd == "tube-off" && argc == 2) workerToggle(c.tube_enabled, c.tube_request_serial, 0);
         else if (cmd == "tube-model" && argc == 3) workerValue(c.tube_model, c.tube_request_serial, whole(argv[2], 0, 2));
@@ -416,12 +473,35 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
         else if (cmd == "fet-threshold" && argc == 3) workerValue(c.fet_threshold_db, c.fet_request_serial, whole(argv[2], -48, 0));
         else if (cmd == "fet-ratio" && argc == 3)
             workerValue(c.fet_ratio_tenths, c.fet_request_serial, static_cast<int>(std::lround(number(argv[2], 1.f, 10.f) * 10.f)));
+        else if (cmd == "fet-knee" && argc == 3) workerValue(c.fet_knee_db, c.fet_request_serial, whole(argv[2], 0, 12));
+        else if (cmd == "fet-gain" && argc == 3) workerValue(c.fet_makeup_db, c.fet_request_serial, whole(argv[2], 0, 24));
+        else if (cmd == "fet-attack" && argc == 3) workerValue(c.fet_attack_ms, c.fet_request_serial, whole(argv[2], 1, 100));
+        else if (cmd == "fet-release" && argc == 3) workerValue(c.fet_release_ms, c.fet_request_serial, whole(argv[2], 5, 500));
         else if (cmd == "mb-on" && argc == 2) workerToggle(c.mb_enabled, c.mb_request_serial, 1);
         else if (cmd == "mb-off" && argc == 2) workerToggle(c.mb_enabled, c.mb_request_serial, 0);
         else if (cmd == "mb-bands" && argc == 3) {
             const int value = whole(argv[2], 3, 5);
             if (value != 3 && value != 5) throw std::invalid_argument("Multiband must use 3 or 5 bands");
             workerValue(c.mb_band_count, c.mb_request_serial, value);
+        }
+        else if (cmd == "mb-crossover" && argc == 3) {
+            const auto edit = viperbass::cli_batch::crossoverEdit(
+                argv[2], c.mb_band_count.load() == 5 ? 5 : 3);
+            workerValue(c.mb_crossovers_hz[edit.index], c.mb_request_serial, edit.hz);
+        }
+        else if (cmd == "mb-band" && argc == 3) {
+            const auto edit = viperbass::cli_batch::indexedEdit(
+                argv[2], c.mb_band_count.load() == 5 ? 5 : 3, false);
+            auto& b = c.mb_bands[edit.index];
+            const int wholeValue = static_cast<int>(std::lround(edit.value));
+            if (edit.field == "enabled") workerValue(b.enabled, c.mb_request_serial, wholeValue);
+            else if (edit.field == "threshold") workerValue(b.threshold_db, c.mb_request_serial, wholeValue);
+            else if (edit.field == "ratio") workerValue(b.ratio_tenths, c.mb_request_serial,
+                                                       static_cast<int>(std::lround(edit.value * 10)));
+            else if (edit.field == "knee") workerValue(b.knee_db, c.mb_request_serial, wholeValue);
+            else if (edit.field == "gain") workerValue(b.makeup_db, c.mb_request_serial, wholeValue);
+            else if (edit.field == "attack") workerValue(b.attack_ms, c.mb_request_serial, wholeValue);
+            else if (edit.field == "release") workerValue(b.release_ms, c.mb_request_serial, wholeValue);
         }
         else if (cmd == "ddc-on" && argc == 2) workerToggle(c.ddc_enabled, c.ddc_request_serial, 1);
         else if (cmd == "ddc-off" && argc == 2) workerToggle(c.ddc_enabled, c.ddc_request_serial, 0);
@@ -546,7 +626,7 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
         std::cerr << "Invalid value: " << e.what() << '\n';
         return 2;
     }
-    if (cmd != "status" && cmd != "eq-preset" && !viperbass::persistCliSettings(cmd, c)) {
+    if (cmd != "status" && cmd != "eq-preset" && !viperbass::persistCliSettings(cmd, c, modifiedDeqBand)) {
         std::cerr << "Live DSP controls updated, but the saved CLI settings could not be written.\n";
         return 1;
     }
@@ -571,9 +651,12 @@ int main(int argc, char** argv) {
     viperbass::Mapping inspection;
     const bool attached = inspection.attach();
     const int eqBands = attached ? inspection.get()->eq_band_count.load() : 10;
+    const int deqBands = attached ? inspection.get()->deq_band_count.load() : 3;
+    const int mbBands = attached ? inspection.get()->mb_band_count.load() : 3;
     std::vector<viperbass::cli_batch::Command> commands;
     std::string error;
-    if (!viperbass::cli_batch::parse(argc - 1, argv + 1, eqBands, commands, error)) {
+    if (!viperbass::cli_batch::parse(argc - 1, argv + 1, eqBands, commands,
+                                  error, deqBands, mbBands)) {
         std::cerr << "Invalid command sequence: " << error << '\n';
         return 2;
     }
