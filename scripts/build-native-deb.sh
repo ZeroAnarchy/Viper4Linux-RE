@@ -115,7 +115,7 @@ if [[ $skip_install == 0 ]]; then
     apt-get install -y --no-install-recommends "$package"
     viper4linux-ctl --help >/dev/null
     v4l-cli --help >/dev/null
-    python3 /usr/lib/viper4linux/viper_launcher.py --fingerprint >/dev/null
+    viper4linux --fingerprint >/dev/null
 fi
 (cd "$out" && sha256sum -- "$(basename "$package")" > SHA256SUMS && sha256sum --check SHA256SUMS)
 if [[ $skip_install == 1 ]]; then

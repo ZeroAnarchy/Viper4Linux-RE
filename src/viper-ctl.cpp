@@ -6,11 +6,18 @@
 #include "viper-eq-storage.h"
 #include "viper-cli-files.h"
 #include "viper-cli-batch.h"
+#include "viper-cli-presets.h"
+#include "viper-cli-worker-ack.h"
+#ifndef VIPER_MOCK_TEST_IPC
+#include "viper-lifecycle.h"
+#endif
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <QFileInfo>
+#include <QCoreApplication>
 #include <iostream>
 #include <iomanip>
 #include <ostream>
@@ -22,11 +29,17 @@
 
 namespace {
 void usage(std::ostream& out = std::cerr) {
-    out << "Usage: v4l-cli [GLOBAL] [--EFFECT OPTION...] ...\n\n"
+    out << "Usage: v4l-cli [GLOBAL] [--EFFECT OPTION...] ...\n"
+           "       v4l-cli --preset [ACTION [NAME ...]]\n\n"
            "Global commands:\n"
            "  --on                  Enable master DSP processing\n"
            "  --off                 Bypass master DSP processing\n"
            "  --status              Inspect live DSP status (optional effect, --full)\n"
+           "  --preset              Manage named effect presets (try --preset --help)\n"
+           "  --reset-effects       Restore every DSP setting to GUI defaults\n"
+           "  --quit-gui            Close GUI; keep ViPER backend running\n"
+           "  --quit-all            Close GUI and stop ViPER backend\n"
+           "  --restart-backend     Restart ViPER backend and Audio Output monitor\n"
            "  --help                Show this help\n\n"
            "Effect selectors (alphabetical):\n";
     for (const auto& entry : viperbass::cli_scope::effects)
@@ -35,6 +48,20 @@ void usage(std::ostream& out = std::cerr) {
            "  v4l-cli --on --bass on gain=3 --headphone on level=2\n\n"
            "Use v4l-cli --[EFFECT] --help for effect-specific operation.\n"
            "Use man v4l-cli for complete details\n";
+}
+void usagePreset(std::ostream& out = std::cout) {
+    out << "Usage: v4l-cli --preset [list]\n"
+           "       v4l-cli --preset --help\n"
+           "       v4l-cli --preset save NAME\n"
+           "       v4l-cli --preset overwrite NAME\n"
+           "       v4l-cli --preset load NAME\n"
+           "       v4l-cli --preset rename OLD NEW\n"
+           "       v4l-cli --preset delete NAME\n\n"
+           "Complete named effect presets are shared with the GUI.\n"
+           "Quote names containing spaces (e.g. --preset save \"My Sound\").\n"
+           "Use --preset help as an alias for --preset --help.\n"
+           "Save refuses duplicates; overwrite must be explicit.\n"
+           "Use --reset-effects separately to reset DSP defaults.\n";
 }
 void usageStatus(std::ostream& out = std::cout) {
     out << "Usage: v4l-cli --status [EFFECT] [--full]\n"
@@ -130,26 +157,12 @@ void workerValue(std::atomic<std::int32_t>& parameter,
     if (parameter.exchange(value, std::memory_order_relaxed) != value)
         serial.fetch_add(1, std::memory_order_release);
 }
-// EQ coefficients are applied asynchronously by the native DSP worker.
-// Wait after successful CLI EQ edits, not for read-only status requests.
-// Production always uses ten seconds; mock CLI tests can shorten one
-// invocation without changing the public CLI or slowing CTest.
+// All native worker effects must acknowledge before a CLI edit reports success.
 #ifdef VIPER_MOCK_TEST_IPC
-std::chrono::steady_clock::duration eqAckTimeout = std::chrono::seconds(10);
+std::chrono::steady_clock::duration workerAckTimeout = std::chrono::seconds(10);
 #else
-constexpr auto eqAckTimeout = std::chrono::seconds(10);
+constexpr auto workerAckTimeout = std::chrono::seconds(10);
 #endif
-bool waitForEqApplied(const viperbass::Controls& c,
-                      std::chrono::steady_clock::duration timeout) {
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (true) {
-        if (c.eq_applied_serial.load(std::memory_order_acquire) ==
-            c.eq_request_serial.load(std::memory_order_acquire))
-            return true;
-        if (std::chrono::steady_clock::now() >= deadline) return false;
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-}
 void show(viperbass::Controls& c, const std::string& command = "status",
           const char* bandText = nullptr, bool expanded = false,
           const std::string& selectedEffect = {}) {
@@ -284,6 +297,111 @@ struct BatchSummary {
     }
 };
 }
+
+int executeRootPreset(int argc, char** argv) {
+    const std::string root(argv[1]);
+    const bool reset = root == "--reset-effects";
+    const bool preset = root == "--preset";
+    const std::string action = reset ? "reset"
+        : argc >= 3 ? std::string(argv[2]) : "list";
+    const bool help = preset && action == "help";
+    const bool list = preset && action == "list";
+    const bool save = preset && action == "save";
+    const bool overwrite = preset && action == "overwrite";
+    const bool load = preset && action == "load";
+    const bool rename = preset && action == "rename";
+    const bool remove = preset && action == "delete";
+    if ((!reset && !preset) ||
+        (reset && argc != 2) ||
+        (help && argc != 3) ||
+        (list && argc != 2 && argc != 3) ||
+        ((save || overwrite || load || remove) && argc != 4) ||
+        (rename && argc != 5) ||
+        (!reset && !help && !list && !save && !overwrite && !load && !rename && !remove)) {
+        std::cerr << "Invalid preset operation. See v4l-cli --preset --help.\n";
+        return 2;
+    }
+    if (help) {
+        usagePreset();
+        return 0; // Pure help: never inspect or write DSP/settings.
+    }
+    QSettings settings("ViPERforLinux", "ViPERClean");
+    settings.sync();
+    QString error;
+    // Match the GUI's one-time import of older single-slot presets.
+    if (!reset && !viper_presets::migrateLegacyPreset(settings, &error)) {
+        std::cerr << "Preset migration: " << error.toStdString() << '\n';
+        return 1;
+    }
+    if (list) {
+        viperbass::cli_presets::list(std::cout);
+        return 0; // Metadata operations never require a DSP backend.
+    }
+    if (rename || remove) {
+        const bool ok = rename
+            ? viperbass::cli_presets::rename(QString::fromUtf8(argv[3]),
+                                            QString::fromUtf8(argv[4]), error)
+            : viperbass::cli_presets::remove(QString::fromUtf8(argv[3]), error);
+        if (!ok) {
+            std::cerr << "Named preset: " << error.toStdString() << '\n';
+            return 2;
+        }
+        std::cout << (rename ? "Renamed" : "Deleted") << " named effect preset.\n";
+        return 0;
+    }
+    viperbass::cli_presets::Snapshot snapshot;
+    if (load) {
+        viper_presets::NamedPreset found;
+        if (!viperbass::cli_presets::resolveByName(
+                QString::fromUtf8(argv[3]), found, error) ||
+            !viperbass::cli_presets::readPreset(found.path, snapshot, error)) {
+            std::cerr << "Named preset: " << error.toStdString() << '\n';
+            return 2; // Validate the entire file before modifying DSP state.
+        }
+    }
+    viperbass::Mapping mapping;
+    if (!mapping.attach()) {
+        std::cerr << "A live ViPER DSP control channel is required for "
+                  << (reset ? "effect reset" : "complete preset operations")
+                  << ". Start the backend and retry.\n";
+        return 1;
+    }
+    auto& c = *mapping.get();
+    if (save || overwrite) {
+        if (!viperbass::cli_presets::save(
+                QString::fromUtf8(argv[3]), overwrite, settings, c, error)) {
+            std::cerr << "Named preset: " << error.toStdString() << '\n';
+            return 2;
+        }
+        std::cout << "Complete effect preset " << (overwrite ? "overwritten" : "saved")
+                  << ": " << argv[3] << '\n';
+        return 0; // Saving a snapshot never changes the live DSP.
+    }
+    if (reset) {
+        snapshot = viperbass::cli_presets::capture(settings, c, true);
+        // GUI Reset disables DDC/Convolver without deleting their library
+        // references, so subsequent re-enabling can reuse those selections.
+        snapshot.insert("ddc_profile", settings.value("ddc_profile").toString());
+        snapshot.insert("convolver_kernel", settings.value("convolver_kernel").toString());
+    }
+    if (!viperbass::cli_presets::apply(settings, c, snapshot, error)) {
+        std::cerr << "Effect configuration: " << error.toStdString() << '\n';
+        return 1;
+    }
+    std::string pendingWorkers;
+    if (!viperbass::cli_worker_ack::waitForCompletion(
+            c, viperbass::cli_worker_ack::snapshot(c), true,
+            workerAckTimeout, pendingWorkers)) {
+        std::cerr << "Full configuration committed, but workers did not acknowledge "
+                     "within 10 seconds: " << pendingWorkers
+                  << ". Check v4l-cli --status --full.\n";
+        return 1;
+    }
+    std::cout << (reset ? "All effects restored to defaults; saved presets preserved.\n"
+                        : "Complete named effect preset loaded.\n");
+    return 0;
+}
+
 int executeOne(int argc, char** argv, bool emitReport = true) {
     if (argc == 2 && (std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h")) {
         usage(std::cout);
@@ -293,6 +411,10 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
         const std::string command(argv[1]);
         if (command == "--status") {
             usageStatus();
+            return 0;
+        }
+        if (command == "--preset") {
+            usagePreset();
             return 0;
         }
         if (command.rfind("--", 0) == 0) {
@@ -713,10 +835,37 @@ int executeOne(int argc, char** argv, bool emitReport = true) {
 // validates the entire command sequence before the first edit. Runtime/backend
 // failures can still interrupt a partially executed sequence (not atomic).
 int main(int argc, char** argv) {
+#ifndef VIPER_MOCK_TEST_IPC
+    QCoreApplication app(argc, argv);
+    const QString invoked = QFileInfo(QString::fromLocal8Bit(argv[0])).fileName();
+    if (invoked == QStringLiteral("viper4linux")) {
+        if (argc == 1) return viper_lifecycle::run("--launch", QString::fromLocal8Bit(argv[0]));
+        if (argc == 2 && std::string(argv[1]) == "--help") {
+            std::cout << "Usage: viper4linux [--fingerprint|--preflight|--restart-backend]\n"
+                         "Start/reuse the ViPER backend and output monitor, then open GUI.\n"
+                         "For DSP and lifecycle controls use v4l-cli --help.\n";
+            return 0;
+        }
+    }
+    if (argc >= 2 && viper_lifecycle::isLifecycleCommand(argv[1])) {
+        if (argc != 2) {
+            std::cerr << "Lifecycle operations must be standalone commands.\n";
+            return 2;
+        }
+        return viper_lifecycle::run(QString::fromLocal8Bit(argv[1]),
+                                    QString::fromLocal8Bit(argv[0]));
+    }
+#endif
     if (argc < 2 || (argc == 2 &&
         (std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h")) ||
         (argc == 3 && std::string(argv[2]) == "--help"))
         return executeOne(argc, argv);
+
+    // Whole-configuration operations cannot be mixed with per-effect
+    // sequences; all are explicit root commands with their own preflight.
+    const std::string root(argv[1]);
+    if (root == "--preset" || root == "--reset-effects")
+        return executeRootPreset(argc, argv);
 
     viperbass::Mapping inspection;
     const bool attached = inspection.attach();
@@ -812,9 +961,9 @@ int main(int argc, char** argv) {
     }
     BatchSummary summary;
     std::size_t completed = 0;
-    const auto startingEqSerial = attached
-        ? inspection.get()->eq_request_serial.load(std::memory_order_acquire) : 0u;
-    bool editedEq = false;
+    const auto startingWorkerSerials = attached
+        ? viperbass::cli_worker_ack::snapshot(*inspection.get())
+        : viperbass::cli_worker_ack::Snapshot{};
     for (auto& command : commands) {
         std::vector<char*> single;
         single.reserve(command.args.size() + 1);
@@ -830,21 +979,20 @@ int main(int argc, char** argv) {
             return result;
         }
         summary.collect(command);
-        const auto& name = command.args[0];
-        if (name.rfind("eq-", 0) == 0 && name != "eq-presets")
-            editedEq = true;
         ++completed;
     }
-    // Confirm an EQ-changing batch only after the worker acknowledges the
-    // committed curve. Timeouts are runtime errors, never successful reports.
-    if (attached && editedEq &&
-        inspection.get()->eq_request_serial.load(std::memory_order_acquire) !=
-            startingEqSerial &&
-        !waitForEqApplied(*inspection.get(), eqAckTimeout)) {
-        std::cerr << "EQ update submitted, but the backend did not acknowledge it "
-                     "within 10 seconds. Settings may have been saved and the "
-                     "update may still apply; check v4l-cli --eq status --full.\n";
-        return 1;
+    // Completion means every modified worker has acknowledged the latest
+    // request, including edits to disabled effects and correction-file loads.
+    if (attached) {
+        std::string pendingWorkers;
+        if (!viperbass::cli_worker_ack::waitForCompletion(
+                *inspection.get(), startingWorkerSerials, false,
+                workerAckTimeout, pendingWorkers)) {
+            std::cerr << "Configuration submitted, but workers did not acknowledge "
+                         "within 10 seconds: " << pendingWorkers
+                      << ". Settings may have been saved; check v4l-cli --status --full.\n";
+            return 1;
+        }
     }
     summary.print(attached ? inspection.get() : nullptr);
     return 0;

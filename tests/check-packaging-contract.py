@@ -20,7 +20,7 @@ readme = (root / 'README.md').read_text()
 license_text = (root / 'LICENSE').read_text()
 copyright_notice = (root / 'COPYRIGHT').read_text()
 third_party_notices = (root / 'THIRD-PARTY-NOTICES.md').read_text()
-launcher = (root / 'src/viper_launcher.py').read_text()
+lifecycle = (root / 'src/viper-lifecycle.h').read_text()
 backend = (arch / 'start-backend').read_text()
 
 
@@ -145,7 +145,7 @@ require('install(FILES "${PROJECT_SOURCE_DIR}/LICENSE"' not in arch_rules,
 require('ViPERDSP-NOTICE.md' in arch_rules, 'Missing custom upstream license notice')
 require('Copyright (C) 2026 Gerald Frank (username227)' in system,
         'Debian metadata must credit original author')
-for required in ('src/viper_launcher.py', 'src/viper_output_monitor.py',
+for required in ('src/viper_output_monitor.py',
                  'file(GLOB _viper_runtime_python', 'Missing package source:',
                  'viper4linux-output-state', 'viper4linux-output',
                  'ViPERDSP-NOTICE.md', 'v4l-cli.1', 'VIPER_SYSTEM_PACKAGE_NAME'):
@@ -154,13 +154,16 @@ require('viper-output-state' in cmake, 'Native output-state binary missing from 
 for path in ('cmake/SourceCheckout.cmake', 'LICENSE', 'COPYRIGHT',
              'THIRD-PARTY-NOTICES.md', 'packaging/arch/viper4linux.desktop'):
     require((root / path).is_file(), f'Missing project file: {path}')
-require('SYSTEM_MODE' in launcher and "Path('/usr/bin/viper4linux-gui')" in launcher,
-        'System launcher mode changed')
-require('SYSTEM_BACKEND' in launcher and 'SYSTEM_ROUTING' in launcher,
+require('p.system' in lifecycle and '"/usr/bin/viper4linux-gui"' in lifecycle,
+        'Native system launch mode changed')
+require('p.dsp' in lifecycle and 'p.routing' in lifecycle,
         'Installed backend configuration changed')
 for required in ('VIPER_BACKEND_FINGERPRINT', 'VIPER_CLEAN_INSTANCE=viperlinux-unified-v1',
                  'PIPEWIRE_CONFIG_DIR="$config"', '/usr/share/pipewire/filter-chain.conf',
                  '/usr/share/viper4linux/routing-config/filter-chain.conf.d'):
     require(required in backend, f'System backend contract missing: {required}')
 
-print('PASS: native packaging depends on CMake-owned DSP preparation, source build, install and launcher contracts')
+require('"bin/viper4linux|viper4linux-ctl"' in (root / 'cmake/InstallSystem.cmake').read_text(),
+        'Native desktop launch symlink missing')
+require(not (root / 'src/viper_launcher.py').exists(), 'Retired Python launcher unexpectedly shipped')
+print('PASS: native packaging uses one lifecycle controller and CMake-owned source/install rules')

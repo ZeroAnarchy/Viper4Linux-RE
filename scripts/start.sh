@@ -4,11 +4,12 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 # Preserve a developer-edited source routing config, if present. New CMake
 # checkouts generate the stock routing config only inside build/routing-config.
-config_dir="$PWD/build/routing-config"
+build_dir=${VIPER_SOURCE_BUILD_DIR:-$PWD/build}
+config_dir="$build_dir/routing-config"
 if [[ -r routing-config/filter-chain.conf ]]; then
   config_dir="$PWD/routing-config"
 fi
-[[ -s build/viper_dsp_ladspa.so && -x build/viper-ctl &&
+[[ -s "$build_dir/viper_dsp_ladspa.so" && -x "$build_dir/viper-ctl" &&
    -r "$config_dir/filter-chain.conf" &&
    -r "$config_dir/filter-chain.conf.d/99-viper-smart.conf" ]] || {
   echo 'Missing source build or routing config; rerun cmake -S . -B build && cmake --build build' >&2
@@ -50,12 +51,12 @@ printf 'Stop this foreground backend with your terminal interrupt shortcut.\n\n'
 
 # Identify the actual compiled DSP/control/config so a future launcher can
 # safely replace an outdated backend, even when installed from another tree.
-backend_fingerprint=$(python3 src/viper_launcher.py --fingerprint)
+backend_fingerprint=$("$build_dir/viper-ctl" --fingerprint)
 # Retain the unified instance marker so existing control tools remain compatible. Discard
 # PIPEWIRE_DAEMON; the client only connects to your existing PipeWire server.
 exec env -u PIPEWIRE_DAEMON \
   VIPER_CLEAN_INSTANCE=viperlinux-unified-v1 \
   VIPER_BACKEND_FINGERPRINT="$backend_fingerprint" \
-  LADSPA_PATH="$PWD/build${LADSPA_PATH:+:$LADSPA_PATH}" \
+  LADSPA_PATH="$build_dir${LADSPA_PATH:+:$LADSPA_PATH}" \
   PIPEWIRE_CONFIG_DIR="$config_dir" \
   pipewire -c filter-chain.conf

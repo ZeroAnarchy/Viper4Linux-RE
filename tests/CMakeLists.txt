@@ -87,7 +87,7 @@ endforeach()
 
 # These embed production CLI/output-state sources behind a mock-only IPC
 # namespace and use the existing Qt6::Core dependency already found by CMake.
-foreach(_viper_name IN ITEMS cli-controls cli-settings cli-eq-presets output-state)
+foreach(_viper_name IN ITEMS cli-controls cli-settings cli-eq-presets cli-presets output-state)
   string(REPLACE "-" "_" _viper_target "viper_test_${_viper_name}")
   add_executable(${_viper_target} "check-${_viper_name}.cpp")
   set_target_properties(${_viper_target} PROPERTIES OUTPUT_NAME "check-${_viper_name}")
@@ -97,6 +97,19 @@ foreach(_viper_name IN ITEMS cli-controls cli-settings cli-eq-presets output-sta
   target_link_libraries(${_viper_target} PRIVATE Qt6::Core Threads::Threads)
   list(APPEND _viper_native_mock_targets ${_viper_target})
 endforeach()
+
+# Isolated native lifecycle/fingerprint/process-discovery regression tests.
+# The test uses a fake /proc tree, never signals or starts a real backend.
+add_executable(viper_test_native_lifecycle check-native-lifecycle.cpp)
+target_include_directories(viper_test_native_lifecycle PRIVATE "${_viper_test_include}")
+target_link_libraries(viper_test_native_lifecycle PRIVATE Qt6::Core Qt6::Network)
+target_compile_options(viper_test_native_lifecycle PRIVATE
+  -O2 -UNDEBUG -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME viper_package_native_lifecycle
+  COMMAND "$<TARGET_FILE:viper_test_native_lifecycle>")
+set_tests_properties(viper_package_native_lifecycle PROPERTIES
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" LABELS "developer;package;lifecycle")
+list(APPEND _viper_native_mock_targets viper_test_native_lifecycle)
 
 # Runtime named-preset compatibility: isolated, disposable XDG data directory.
 add_executable(viper_test_named_presets check-named-presets.cpp)
@@ -178,6 +191,7 @@ foreach(_viper_mock_case IN ITEMS
     cli-batch
     cli-settings
     cli-eq-presets
+    cli-presets
     output-state)
   string(REPLACE "-" "_" _viper_test_name "${_viper_mock_case}")
   add_test(NAME "viper_mock_${_viper_test_name}"

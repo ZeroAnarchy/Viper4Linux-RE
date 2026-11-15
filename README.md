@@ -134,7 +134,7 @@ Music players / other audio applications
           Audio processing
 ```
 
-The launcher starts the DSP backend when necessary, reuses a compatible
+The native CLI lifecycle controller starts the DSP backend when necessary, reuses a compatible
 running instance, and replaces an outdated one when its backend components
 have changed. It does **not** restart PipeWire itself. The DSP runs separately
 from the GUI, so the window can be minimized or hidden in the tray
@@ -184,7 +184,7 @@ Launching `./viper4linux` can replace a running packaged ViPER backend.
 See the [developer guide](docs/DEVELOPMENT.md) for build and test details.
 
 Once installed, launch `viper4linux` from the application menu or terminal.
-For command-line controls, use `viper4linux-ctl --help` or `v4l-cli --help`;
+For command-line controls and lifecycle operations (`--quit-gui`, `--quit-all`, `--restart-backend`), use `v4l-cli --help`;
 see the [user guide](docs/USER-GUIDE.md) for operation and troubleshooting.
 
 ## Presets, profiles, and settings
@@ -213,7 +213,7 @@ behavior, backup considerations, and what a preset does *not* embed.
   behavior still need broader independent testing. Cinnamon/X11 tray behavior
   has been tested; KDE Plasma has not.
 - **Some advanced DSP controls** are not individually exposed in the GUI; the
-  CLI is a subset of GUI functionality, not a complete scripting API.
+  CLI includes GUI-compatible effect controls and native backend lifecycle management.
 - **ViPER-DDC** requires a valid `.vdc` file and its native processor currently
   handles only 44.1 and 48 kHz.
 - **JamesDSP** may compete for PipeWire routing; reliable simultaneous

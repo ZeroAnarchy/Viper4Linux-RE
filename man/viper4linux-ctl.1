@@ -14,6 +14,34 @@ viper4linux-ctl \- inspect and adjust ViPER4Linux-RE's live PipeWire DSP control
 .br
 .B v4l-cli --EFFECT --help
 .br
+.B v4l-cli --preset
+.RI [ list ]
+.br
+.B v4l-cli --preset --help
+.br
+.B v4l-cli --preset save
+.I NAME
+.br
+.B v4l-cli --preset overwrite
+.I NAME
+.br
+.B v4l-cli --preset load
+.I NAME
+.br
+.B v4l-cli --preset rename
+.I OLD NEW
+.br
+.B v4l-cli --preset delete
+.I NAME
+.br
+.B v4l-cli --reset-effects
+.br
+.B v4l-cli --quit-gui
+.br
+.B v4l-cli --quit-all
+.br
+.B v4l-cli --restart-backend
+.br
 .B v4l-cli --help
 .SH DESCRIPTION
 .B viper4linux-ctl
@@ -25,8 +53,9 @@ Effect commands require an active channel; they do not start PipeWire.
 Successful edits are written to the same per-user settings used by the GUI,
 including when the GUI is closed. The GUI also reads the live controls while it
 is open. The CLI can apply and manage user EQ presets and select or import DDC and
-Convolver correction files. Full named effect-preset management, including
-creating and restoring whole-configuration presets, remains a GUI feature.
+Convolver correction files. Complete named effect presets are shared with the
+GUI, and can be listed, saved, explicitly overwritten, loaded, renamed or deleted.
+The standalone global reset restores the GUI's DSP defaults.
 .PP
 Throughout this manual, a range such as "0 through 100" includes both ends.
 A 
@@ -113,9 +142,10 @@ expected range or choices; an invalid sequence prints only the error,
 without status reports. Valid commands execute in their
 listed order using the same handlers as standalone commands. After all
 commands succeed, one final report shows each affected effect once, using
-its final settings. For an EQ-changing batch, the CLI waits until the native
-worker acknowledges the requested EQ update before printing the summary.
-The wait ends upon acknowledgment, with a 10-second maximum. On timeout,
+its final settings. Whenever a command modifies a native-worker-managed
+effect, the CLI waits for every affected worker to acknowledge the
+requested update before printing its final summary. The wait ends upon
+acknowledgment, with a shared 10-second maximum. On timeout,
 the CLI reports an error; submitted settings may still be saved or applied
 later. Read-only status commands are not delayed. Effects are listed in
 first-appearance order, even if a
@@ -163,6 +193,85 @@ signal is passed through unchanged apart from nonfinite-sample sanitization.
 No arguments. Prints only the confirmation
 .B "Master processing: BYPASSED"
 instead of the complete status report.
+.SH COMPLETE NAMED EFFECT PRESETS AND RESET
+These top-level operations are separate from the per-effect command sequence:
+each must be the only operation in its invocation. Names containing spaces
+must be quoted. These are complete effect snapshots, not Graphic EQ-only curves.
+The GUI and CLI share the same versioned INI library, located at
+.I $XDG_DATA_HOME/viper4linux/presets/
+(usually
+.IR ~/.local/share/viper4linux/presets/ ).
+Each file has a stable UUID identifier. A one-time import of a legacy
+single-slot preset is also available when using preset commands.
+Named format-v1 snapshots intentionally preserve GUI slider precision:
+sub-slider native CLI overrides in the precision settings group are not
+embedded. Loading a full preset clears those overrides, just as the GUI does.
+.TP
+.B --preset
+List saved complete effect presets (same as
+.BR "--preset list" ).
+No running backend required.
+.TP
+.B --preset --help
+Show preset operation syntax. The alias
+.B --preset help
+is also accepted.
+.TP
+.BI "--preset save " NAME
+Save the complete live configuration as a new named preset.
+Duplicates (case-insensitive) are refused; existing files are never
+overwritten implicitly. This does not change the current DSP.
+.TP
+.BI "--preset overwrite " NAME
+Replace the existing named preset with the current live configuration.
+This is an explicit, noninteractive overwrite, suitable for scripts.
+The preset keeps its original UUID filename.
+.TP
+.BI "--preset load " NAME
+Validate and restore the named full configuration, including its active
+graphic EQ curve, all saved EQ layouts and advanced effect parameters.
+The same settings store and worker controls are updated while the GUI is
+open or closed. Existing named presets are not modified.
+The CLI waits for every native worker acknowledgment; a timeout
+reports failure even if the state has already been committed.
+.TP
+.BI "--preset rename " "OLD NEW"
+Rename a saved preset without changing its UUID filename.
+.TP
+.BI "--preset delete " NAME
+Delete a named preset file. The current DSP remains unchanged.
+Renaming and deleting do not require a running backend.
+.TP
+.B --reset-effects
+Restore all effect controls to the GUI's defaults, not merely disable
+their switches: master processing remains enabled, all optional effects
+are disabled, limiter/output controls return to their defaults, EQ
+curves are flattened and compressor/EQ/spatial parameters are reset.
+A CLI reset is an explicit noninteractive root operation with no prompt.
+Saved presets, GUI preferences and IRS/VDC library files are preserved.
+Selected IRS/VDC file references remain available for later re-enabling.
+.SH LIFECYCLE COMMANDS
+The following top-level commands must be issued alone. They do not
+change effect presets or restart system PipeWire.
+.TP
+.B --quit-gui
+Ask the existing GUI to quit while leaving the marked ViPER DSP backend
+running. No GUI quit-preference prompt or preference change is made.
+.TP
+.B --quit-all
+Ask the GUI to quit and stop the marked backend. With no GUI running,
+stop only the verified ViPER backend. Unrelated PipeWire processes are
+never signalled.
+.TP
+.B --restart-backend
+Restart the marked ViPER backend and the Audio Output monitor without
+opening another GUI. The command returns success only when the monitor
+publishes a fresh heartbeat for the new backend.
+.PP
+The
+.B viper4linux
+launcher command is a symlink to this native executable and, with no
+arguments, starts or reuses ViPER before opening the GUI.
 .SH EFFECT SELECTORS
 The accepted selectors are listed alphabetically. Each effect has its own
 options; use its help page (for example,

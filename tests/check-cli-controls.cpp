@@ -50,12 +50,31 @@ int main() {
     viperbass::Mapping server;
     assert(server.create_server());
     MockCliEqAcknowledger eqAck(*server.get());
-    // Exercise timeout and immediate acknowledgment without waiting ten seconds.
+    // Distinct worker groups cannot report successful CLI completion while
+    // their asynchronous requests remain pending.
     viperbass::Controls unacknowledged;
-    unacknowledged.eq_request_serial.store(1);
-    assert(!waitForEqApplied(unacknowledged, std::chrono::milliseconds(0)));
-    unacknowledged.eq_applied_serial.store(1);
-    assert(waitForEqApplied(unacknowledged, std::chrono::milliseconds(0)));
+    const auto before = viperbass::cli_worker_ack::snapshot(unacknowledged);
+    std::string pendingWorkers;
+    unacknowledged.deq_request_serial.store(1);
+    unacknowledged.mb_request_serial.store(1);
+    assert(!viperbass::cli_worker_ack::waitForCompletion(
+        unacknowledged, before, false, std::chrono::milliseconds(0), pendingWorkers));
+    assert(pendingWorkers.find("Dynamic EQ") != std::string::npos);
+    assert(pendingWorkers.find("Multiband") != std::string::npos);
+    unacknowledged.deq_applied_serial.store(1);
+    assert(!viperbass::cli_worker_ack::waitForCompletion(
+        unacknowledged, before, false, std::chrono::milliseconds(0), pendingWorkers));
+    assert(pendingWorkers == "Multiband");
+    unacknowledged.mb_applied_serial.store(1);
+    assert(viperbass::cli_worker_ack::waitForCompletion(
+        unacknowledged, before, false, std::chrono::milliseconds(0), pendingWorkers));
+    const auto noChanges = viperbass::cli_worker_ack::snapshot(unacknowledged);
+    unacknowledged.ddc_request_serial.store(1);
+    assert(!viperbass::cli_worker_ack::waitForCompletion(
+        unacknowledged, noChanges, true, std::chrono::milliseconds(0), pendingWorkers));
+    unacknowledged.ddc_applied_serial.store(1);
+    assert(viperbass::cli_worker_ack::waitForCompletion(
+        unacknowledged, noChanges, true, std::chrono::milliseconds(0), pendingWorkers));
     auto& c = *server.get();
     assert(c.master_enabled.load() == 1 && c.enabled.load() == 1);
 
@@ -434,11 +453,11 @@ int main() {
     eqAck.stop();
     const auto beforeEqRequest = c.eq_request_serial.load();
     c.eq_applied_serial.store(beforeEqRequest, std::memory_order_release);
-    eqAckTimeout = std::chrono::milliseconds(0);
+    workerAckTimeout = std::chrono::milliseconds(0);
     std::string timeoutOutput, timeoutError;
     assert(invoke({"--eq", "level=1:-3.25"}, &timeoutOutput, &timeoutError) == 1);
     assert(timeoutOutput.empty()); // No misleading success report on timeout.
-    assert(timeoutError.find("did not acknowledge it within 10 seconds") !=
+    assert(timeoutError.find("workers did not acknowledge") !=
            std::string::npos);
     assert(c.eq_request_serial.load() == beforeEqRequest + 1);
     assert(c.eq_applied_serial.load() == beforeEqRequest);
@@ -446,7 +465,25 @@ int main() {
     savedEq.sync();
     const QString savedLayout = QString("eq_levels_%1").arg(c.eq_band_count.load());
     assert(savedEq.value(savedLayout).toString().split(',').at(0) == "-325");
-    eqAckTimeout = std::chrono::seconds(10);
+    // Regression: the actual CLI must not report success for a disabled
+    // Dynamic EQ or Multiband edit when its native worker has not acknowledged.
+    std::string deqOutput, deqError;
+    const auto beforeDeqRequest = c.deq_request_serial.load();
+    c.deq_applied_serial.store(beforeDeqRequest);
+    c.deq_enabled.store(0);
+    assert(invoke({"--deq", "band=2:gain:1"}, &deqOutput, &deqError) == 1);
+    assert(deqOutput.empty());
+    assert(deqError.find("Dynamic EQ") != std::string::npos);
+    assert(c.deq_request_serial.load() > beforeDeqRequest);
+    std::string mbOutput, mbError;
+    const auto beforeMbRequest = c.mb_request_serial.load();
+    c.mb_applied_serial.store(beforeMbRequest);
+    c.mb_enabled.store(0);
+    assert(invoke({"--mb", "band=3:gain:8"}, &mbOutput, &mbError) == 1);
+    assert(mbOutput.empty());
+    assert(mbError.find("Multiband") != std::string::npos);
+    assert(c.mb_request_serial.load() > beforeMbRequest);
+    workerAckTimeout = std::chrono::seconds(10);
     server.stop_server();
 
     // Exercise the no-audio case without touching /proc or live PipeWire.

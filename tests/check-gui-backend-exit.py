@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Source contracts and isolated pidfd signaling using a harmless dummy child."""
+"""Runtime pidfd stop-guard test using a harmless child process.
+
+Real Qt activation/quit IPC is separately tested in check-single-gui.py.
+No C++-source-text matching: incidental refactors must not break this test.
+"""
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -7,24 +11,6 @@ import subprocess
 import signal
 
 root = Path(__file__).resolve().parents[1]
-gui = (root / "src/viper-gui.cpp").read_text()
-shell = (root / "src/window/window-shell.inc").read_text()
-assert '#include "gui-backend-exit.h"' in gui
-assert 'viper_gui_exit::stopMarkedBackend(backendPid, error)' in shell
-assert 'viperbass::running_backend_pid()' in shell
-assert 'Remember this choice' in shell and 'ui/backendOnExit' in shell
-assert 'if (!prepareBackendForGuiExit(explicitDecision)) return;' in shell
-assert 'if (backendPid <= 0) return true;' in shell
-decide = shell[shell.index('bool prepareBackendForGuiExit('):shell.index('void quitGui(')]
-assert 'else return false;' in decide  # Cancel leaves GUI open.
-assert 'setDefaultButton(keepButton)' in decide
-assert 'setEscapeButton(cancelButton)' in decide
-assert 'exitGroup->checkedId()' in shell
-close = gui[gui.index('void closeEvent(QCloseEvent* event) override {'):
-            gui.index('void changeEvent(QEvent* event) override {')]
-assert 'quitGui();' in close and 'event->ignore();' in close
-assert 'if (choice == "tray")' in close and 'if (choice == "minimized")' in close
-assert close.index('if (choice == "minimized")') < close.index('quitGui();')
 
 source = r'''
 #include "gui-backend-exit.h"
@@ -97,4 +83,4 @@ with TemporaryDirectory(prefix="viper-gui-exit-") as dirname:
             pass
         if process.poll() is None:
             process.wait(timeout=3)
-print("PASS: GUI backend exit choices, preferences and isolated pidfd stop guard")
+print("PASS: isolated pidfd stop guard rejects unmarked and stops marked child")

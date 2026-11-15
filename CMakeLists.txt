@@ -53,7 +53,10 @@ target_compile_options(viper-output-state PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(viper-ctl src/viper-ctl.cpp)
 target_include_directories(viper-ctl PRIVATE src)
-target_link_libraries(viper-ctl PRIVATE Qt6::Core)
+target_link_libraries(viper-ctl PRIVATE Qt6::Core Qt6::Network)
+target_compile_definitions(viper-ctl PRIVATE
+  VIPER4LINUX_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+  VIPER4LINUX_SOURCE_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 target_compile_options(viper-ctl PRIVATE -Wall -Wextra -Wpedantic)
 
 # Standard CMake BUILD_TESTING defaults to ON. Every normal build compiles

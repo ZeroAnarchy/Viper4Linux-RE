@@ -12,4 +12,4 @@ python3 tests/check-cmake-source-checkout.py
 python3 -m unittest discover -s tests -p 'test_output_*.py' -v
 python3 -m unittest discover -s tests -p 'test_log_retention.py' -v
 
-echo 'PASS: package smoke checks (launcher, staging, per-output logic)'
+echo 'PASS: package smoke checks (native lifecycle, staging, per-output logic)'

@@ -180,20 +180,21 @@
         }
         return true;
     }
-    void quitGui(const QString& explicitDecision = QString()) {
+    bool quitGui(const QString& explicitDecision = QString()) {
         if (audio_restart_process_) {
             QMessageBox::information(this, "Restarting Audio Engine",
                 "The audio engine restart is still in progress. Quit once it finishes.");
-            return;
+            return false;
         }
-        if (!prepareBackendForGuiExit(explicitDecision)) return;
+        if (!prepareBackendForGuiExit(explicitDecision)) return false;
         saveUiGeometry();
-        qApp->quit(); // Only an explicit Stop choice signals the marked backend.
+        QTimer::singleShot(0, qApp, [] { qApp->quit(); });
+        return true; // Allow the native CLI control socket to reply before exit.
     }
 
     // One recovery action for the marked PipeWire client and its output monitor.
-    // The normal launcher is reused, so its locks and instance checks prevent
-    // duplicate processes; the system PipeWire daemon is never restarted.
+    // Native CLI lifecycle locks prevent duplicate marked clients;
+    // the system PipeWire daemon is never restarted.
     void finishAudioEngineRestart(QProcess* process, bool success, const QString& detail) {
         if (audio_restart_process_ != process) return;
         audio_restart_process_ = nullptr;
@@ -228,12 +229,12 @@
 
         // The packaged GUI must use its installed launcher; a development GUI
         // must use its own checkout even when a system package also exists.
-        const QString launcher = QCoreApplication::applicationFilePath() ==
+        const QString controller = QCoreApplication::applicationFilePath() ==
                 QStringLiteral("/usr/bin/viper4linux-gui")
-            ? QStringLiteral("/usr/lib/viper4linux/viper_launcher.py")
-            : QString::fromUtf8(VIPER4LINUX_SOURCE_LAUNCHER);
-        process->setProgram(QStringLiteral("/usr/bin/python3"));
-        process->setArguments({launcher, QStringLiteral("--restart-audio")});
+            ? QStringLiteral("/usr/bin/v4l-cli")
+            : QString::fromUtf8(VIPER4LINUX_SOURCE_CTL);
+        process->setProgram(controller);
+        process->setArguments({QStringLiteral("--restart-backend")});
         process->setProcessChannelMode(QProcess::MergedChannels);
         connect(process, &QProcess::finished, this,
                 [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
@@ -605,8 +606,7 @@
         return QCoreApplication::applicationFilePath() ==
                 QStringLiteral("/usr/bin/viper4linux-gui")
             ? QStringLiteral("/usr/lib/viper4linux/viper_log_retention.py")
-            : QFileInfo(QString::fromUtf8(VIPER4LINUX_SOURCE_LAUNCHER))
-                  .dir().filePath("viper_log_retention.py");
+            : QString::fromUtf8(VIPER4LINUX_SOURCE_LOG_RETENTION);
     }
     void showLogRetention() {
         const QString path = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)

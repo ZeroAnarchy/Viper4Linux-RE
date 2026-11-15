@@ -59,7 +59,24 @@ not reboot.
 
 ## CLI and troubleshooting
 
-The installed CLI command is `viper4linux-ctl`, with the shorter `v4l-cli`
+The installed `viper4linux` launcher is now a symbolic link to the native
+controller, not a separate Python application launcher. The native CLI provides
+three standalone lifecycle commands:
+
+```sh
+v4l-cli --quit-gui        # Close only the GUI; leave ViPER DSP processing audio
+v4l-cli --quit-all        # Close GUI and stop the marked ViPER backend
+v4l-cli --restart-backend # Restart ViPER backend and Audio Output monitor
+```
+
+The restart command does not restart the system PipeWire daemon or create
+a second GUI. A successful exit waits for the new Audio Output monitor's
+fresh heartbeat. CLI-driven quit operations do not alter remembered
+GUI exit preferences.
+
+
+
+The installed native controller is `viper4linux-ctl`, with the shorter `v4l-cli`
 symlink providing the same commands and options. Try:
 
 ```bash
@@ -123,8 +140,11 @@ routing and the backend log: a process can be alive without a working DSP.
 
 The CLI writes **live shared-memory controls** and immediately saves
 successful changes to the same per-user Qt settings store as the GUI, even when
-the GUI is closed. It does not manage named presets, IRS/VDC file selection, or
-all advanced GUI parameters. If the settings store is unwritable, the command
+the GUI is closed. It manages complete named effect presets with
+`--preset` (list) and `--preset --help` (also `--preset help`: save, overwrite, load, rename and
+delete syntax), imports/selects IRS/VDC files, and exposes a standalone
+`--reset-effects` command. Unlike the GUI button,
+the CLI reset is noninteractive: save your current configuration first if needed. If the settings store is unwritable, the command
 reports a persistence failure even though the live DSP change may already have
 taken effect. GUI changes and CLI changes may supersede each other. The commands `on` and `off` control the **global ViPER bypass**;
 `bass-on`, `bass-off`, and `bass-toggle` control only **ViPER Bass**.
@@ -193,7 +213,8 @@ The interface applies changes to the **running** backend. An open GUI reflects
 them on its 500 ms polling cycle and saves changed controls. When the GUI is closed, successful CLI changes still save directly to the
 GUI's Qt preferences; they survive a backend restart without reopening the
 GUI. For settings such as a DDC file or convolver impulse response, select
-the file in the GUI; the CLI can toggle the effect after it is loaded.
+the file in the GUI or use `--ddc file=PATH` /
+`--convolver file=PATH` (or `import=PATH`) from the CLI.
 
 The CLI returns status `0` for a successful command, `1` if no backend is
 running, and `2` for invalid commands or arguments. See

@@ -34,7 +34,7 @@ config="$runtime/viper4linux-filter-config"
 install -d -m 700 "$config"
 cp -- /usr/share/pipewire/filter-chain.conf "$config/filter-chain.conf"
 ln -sfn -- /usr/share/viper4linux/routing-config/filter-chain.conf.d "$config/filter-chain.conf.d"
-fingerprint=$(/usr/bin/python3 /usr/lib/viper4linux/viper_launcher.py --fingerprint)
+fingerprint=$(/usr/bin/viper4linux-ctl --fingerprint)
 exec env -u PIPEWIRE_DAEMON \
   VIPER_CLEAN_INSTANCE=viperlinux-unified-v1 \
   VIPER_BACKEND_FINGERPRINT="$fingerprint" \

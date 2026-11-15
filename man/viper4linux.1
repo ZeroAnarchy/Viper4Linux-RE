@@ -1,49 +1,67 @@
 .TH VIPER4LINUX 1 "November 2026" "ViPER4Linux-RE" "User Commands"
 .SH NAME
-viper4linux \- launch the ViPER4Linux-RE PipeWire backend and Qt6 GUI
+viper4linux \- start or reuse the native ViPER4Linux-RE backend and Qt6 GUI
 .SH SYNOPSIS
 .B viper4linux
-.RI [ --fingerprint ]
+.RI [ --help | --fingerprint | --preflight | --restart-backend ]
 .SH DESCRIPTION
-Starts the matching ViPER4Linux-RE PipeWire filter-chain backend if needed,
-then launches the Qt6 GUI. A compatible running backend is reused. If an older
-marked ViPER backend is present, the launcher attempts to replace only that
-instance; it does not restart PipeWire itself. Quit GUI leaves backend audio
-processing running.
+The
+.B viper4linux
+command is a symbolic link to the same native executable as
+.BR v4l-cli .
+With no arguments, it starts or reuses the matching marked ViPER PipeWire
+filter-chain backend and Audio Output monitor, then opens the Qt6 GUI.
+A second launch activates the existing GUI instead of creating a duplicate.
+Backend fingerprints include the built DSP, controller binary and routing
+configuration. A mismatched marked backend may be replaced, but unrelated
+PipeWire clients and the system PipeWire service are never stopped.
+.PP
+The shorter
+.B v4l-cli
+command provides effect controls and explicit lifecycle operations.
+The Python Audio Output monitor remains an independent worker, but the
+former Python application launcher has been retired.
 .SH OPTIONS
 .TP
 .B --help
-Display available launcher options and exit without starting the backend.
+Show launcher usage without starting anything.
 .TP
 .B --fingerprint
-Print the fingerprint of the installed DSP binary, controller and PipeWire
-routing configuration; do not launch the backend or GUI. The launcher uses
-this fingerprint to reuse a compatible running instance or to replace its
-own older or mismatched instance. It does not terminate unrelated PipeWire
-clients.
+Print a SHA-256 fingerprint of the DSP, controller and PipeWire routing
+configuration. Does not start, restart or stop any process.
+.TP
+.B --preflight
+Inspect the backend and report whether a normal launch would start,
+reuse or replace its marked client. Read-only snapshot, not a lock.
+.TP
+.B --restart-backend
+Restart the marked ViPER backend and Audio Output monitor without starting
+another GUI. Wait for a fresh monitor heartbeat before reporting success.
+.SH CLI LIFECYCLE COMMANDS
+Run these via
+.BR v4l-cli :
+.TP
+.B --quit-gui
+Quit the GUI and keep the ViPER backend processing audio. Does not change
+remembered GUI quit preferences.
+.TP
+.B --quit-all
+Quit the GUI and stop the marked ViPER backend. If the GUI is absent, stop
+only the marked backend; never signal system PipeWire.
+.TP
+.B --restart-backend
+Restart the ViPER backend and its Audio Output monitor. The GUI stays open,
+and current settings are restored by the backend's normal persistence path.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/ViPERforLinux/ViPERClean.conf
-Current effect settings and UI preferences (usual location under ~/.config).
+Current effect settings and GUI preferences.
 .TP
 .I $XDG_DATA_HOME/viper4linux/presets/
-Named effect presets (usual location under ~/.local/share).
-.TP
-.I $XDG_DATA_HOME/viper4linux/IRS/
-Convolver impulse-response files.
-.TP
-.I $XDG_DATA_HOME/viper4linux/VDC/
-ViPER-DDC profile files.
+Saved named effect presets.
 .TP
 .I $XDG_STATE_HOME/viper4linux/backend.log
-Backend startup diagnostics (usual location under ~/.local/state).
-.TP
-.I $XDG_CONFIG_HOME/autostart/viper4linux-re.desktop
-Optional user-session autostart created by the GUI.
-.SH NOTES
-Window/tray behavior and named presets are configured in the GUI.
-The backend's virtual sink and routing are PipeWire-specific; audio effects
-may continue after the GUI is closed. Start at a safe listening volume.
+Combined timestamped backend/monitor diagnostics.
 .SH SEE ALSO
 .BR viper4linux-ctl (1),
 .BR v4l-cli (1)
