@@ -37,11 +37,11 @@ with tempfile.TemporaryDirectory(prefix='viper arch cmake packaging ') as tmp:
     (tree / 'docs').mkdir()
     (tree / 'docs/guide.md').write_text('example\n')
     paths = [
-        'src/viper_launcher.py', 'src/viper_output_graph.py',
+        'src/viper_output_graph.py',
         'src/viper_output_store.py', 'src/viper_output_memory.py',
         'src/viper_output_monitor.py', 'src/viper_output_info.py',
         'src/viper_future_feature.py',  # Must be installed without editing a recipe.
-        'packaging/arch/start-backend', 'packaging/arch/viper4linux',
+        'packaging/arch/start-backend',
         'packaging/arch/viper4linux-output',
         'packaging/arch/viper4linux.desktop',
         'routing-config/filter-chain.conf.d/99-viper-smart.conf',
@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix='viper arch cmake packaging ') as tmp:
     result = stage(build, dest)
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'Installing:' in result.stdout or 'Up-to-date:' in result.stdout
-    for name in ['viper_launcher.py', 'viper_output_graph.py', 'viper_output_store.py',
+    for name in ['viper_output_graph.py', 'viper_output_store.py',
                  'viper_output_memory.py', 'viper_output_monitor.py',
                  'viper_output_info.py', 'viper_future_feature.py']:
         output = dest / 'usr/lib/viper4linux' / name
@@ -88,6 +88,8 @@ with tempfile.TemporaryDirectory(prefix='viper arch cmake packaging ') as tmp:
         assert (dest / 'usr/bin' / name).stat().st_mode & 0o777 == 0o755
     assert (dest / 'usr/lib/viper4linux/start-backend').stat().st_mode & 0o777 == 0o755
     assert os.readlink(dest / 'usr/bin/v4l-cli') == 'viper4linux-ctl'
+    assert os.readlink(dest / 'usr/bin/viper4linux') == 'viper4linux-ctl'
+    assert not (dest / 'usr/lib/viper4linux/viper_launcher.py').exists()
     assert os.readlink(dest / 'usr/share/man/man1/v4l-cli.1') == 'viper4linux-ctl.1'
     assert (dest / 'usr/lib/ladspa/viper_dsp_ladspa.so').stat().st_mode & 0o777 == 0o755
     assert (dest / 'usr/share/doc/viper4linux/docs/guide.md').read_text() == 'example\n'

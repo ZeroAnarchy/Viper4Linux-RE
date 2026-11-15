@@ -114,8 +114,10 @@ for app in viper4linux viper4linux-gui viper4linux-ctl \
     test -x "/usr/bin/$app"
 done
 test -x /usr/lib/viper4linux/start-backend
-test -r /usr/lib/viper4linux/viper_launcher.py
+test ! -e /usr/lib/viper4linux/viper_launcher.py
 test -r /usr/share/viper4linux/routing-config/filter-chain.conf.d/99-viper-smart.conf
+test -L /usr/bin/viper4linux
+test "$(readlink /usr/bin/viper4linux)" = viper4linux-ctl
 test -L /usr/bin/v4l-cli
 test "$(readlink /usr/bin/v4l-cli)" = viper4linux-ctl
 test -s /usr/lib/ladspa/viper_dsp_ladspa.so
@@ -127,6 +129,6 @@ echo 'Checking read-only CLI help and backend fingerprint entrypoints...'
 # Do not run viper4linux, start-backend, or a live PipeWire session.
 viper4linux-ctl --help >/dev/null
 v4l-cli --help >/dev/null
-python3 /usr/lib/viper4linux/viper_launcher.py --fingerprint >/dev/null
+viper4linux --fingerprint >/dev/null
 
 echo "PASS: installed $mode package in disposable CI container; files, aliases, LADSPA export, and read-only CLI checks passed (no audio launched)"

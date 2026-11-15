@@ -43,7 +43,9 @@ runuser -u builder -- bash -c '
         cmake --build "$source_tree/build" --target viper_source_check
         test -r "$source_tree/build/routing-config/filter-chain.conf"
         test -r "$source_tree/build/routing-config/filter-chain.conf.d/99-viper-smart.conf"
-        (cd "$source_tree" && python3 src/viper_launcher.py --fingerprint >/dev/null)
+        # Exercise the controller built with this source-checkout routing tree,
+        # not the independently configured package-staging controller.
+        (cd "$source_tree" && "$source_tree/build/viper-ctl" --fingerprint >/dev/null)
         echo "PASS: real CMake source-checkout build, routing setup and backend fingerprint"
     ' bash "$source_tree"
 

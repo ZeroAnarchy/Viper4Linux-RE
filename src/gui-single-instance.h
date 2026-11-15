@@ -75,15 +75,17 @@ public:
     }
 
     void onActivation(QObject* receiver,
-                      std::function<void(const QByteArray&)> showWindow) {
+                      std::function<void(const QByteArray&)> showWindow,
+                      std::function<bool(bool)> quitRequest = {}) {
         QObject::connect(&server_, &QLocalServer::newConnection, receiver,
-            [this, receiver, showWindow = std::move(showWindow)] {
+            [this, receiver, showWindow = std::move(showWindow),
+             quitRequest = std::move(quitRequest)] {
                 while (server_.hasPendingConnections()) {
                     QLocalSocket* client = server_.nextPendingConnection();
                     if (!client) continue;
                     auto buffer = QSharedPointer<QByteArray>::create();
                     auto delivered = QSharedPointer<bool>::create(false);
-                    auto finish = [client, buffer, delivered, showWindow] {
+                    auto finish = [client, buffer, delivered, showWindow, quitRequest] {
                         if (*delivered) return;
                         buffer->append(client->readAll());
                         if (!buffer->contains('\n') &&
@@ -91,6 +93,20 @@ public:
                             buffer->size() <= 8192)
                             return;
                         *delivered = true;
+                        // Explicit, user-local CLI quit request. Never interpret an
+                        // unrecognized socket packet as a quit operation.
+                        if (buffer->startsWith("V4L-QUIT/1 ")) {
+                            const bool keep = *buffer == "V4L-QUIT/1 keep\n";
+                            const bool stop = *buffer == "V4L-QUIT/1 stop\n";
+                            const bool accepted = (keep || stop) && quitRequest &&
+                                                  quitRequest(stop);
+                            client->write(accepted ? "OK\n" : "ERROR\n");
+                            client->flush();
+                            client->waitForBytesWritten(1000);
+                            client->disconnectFromServer();
+                            client->deleteLater();
+                            return;
+                        }
                         QByteArray token;
                         if (buffer->startsWith("V4L-ACTIVATE/1 ") &&
                             buffer->size() <= 8192) {
@@ -104,7 +120,8 @@ public:
                         }
                         client->disconnectFromServer();
                         client->deleteLater();
-                        showWindow(token);
+                        if (buffer->startsWith("V4L-ACTIVATE/1 "))
+                            showWindow(token);
                     };
                     QObject::connect(client, &QLocalSocket::readyRead, receiver, finish);
                     QObject::connect(client, &QLocalSocket::disconnected, receiver, finish);

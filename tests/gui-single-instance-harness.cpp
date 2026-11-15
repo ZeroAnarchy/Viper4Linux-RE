@@ -25,11 +25,18 @@ int main(int argc, char** argv) {
                 activation.write("\n");
             }
         }
+    }, [markers](bool stop) {
+        QFile request(QDir(markers).filePath("requested-quit"));
+        if (!request.open(QIODevice::WriteOnly | QIODevice::Append)) return false;
+        request.write(stop ? "stop\n" : "keep\n");
+        return true; // Harness never actually quits or touches an audio backend.
     });
     QFile ready(QDir(markers).filePath("ready"));
     if (!ready.open(QIODevice::WriteOnly | QIODevice::Truncate)) return 22;
     ready.write("primary\n");
     ready.close();
-    QTimer::singleShot(10000, &app, &QCoreApplication::quit);
+    // The test driver terminates this process explicitly. Give busy CI workers
+    // ample time before the orphan guard exits a deliberately stalled harness.
+    QTimer::singleShot(30000, &app, &QCoreApplication::quit);
     return app.exec();
 }

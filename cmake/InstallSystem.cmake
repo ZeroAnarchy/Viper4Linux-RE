@@ -37,10 +37,10 @@ endif()
 # Validate required source files before any package staging begins.
 # Additional src/viper_*.py files are included automatically below.
 foreach(_viper_source IN ITEMS
-    src/viper_launcher.py src/viper_output_graph.py
+    src/viper_output_graph.py
     src/viper_output_store.py src/viper_output_memory.py
     src/viper_output_monitor.py
-    packaging/arch/start-backend packaging/arch/viper4linux
+    packaging/arch/start-backend
     packaging/arch/viper4linux-output packaging/arch/viper4linux.desktop
     routing-config/filter-chain.conf.d/99-viper-smart.conf
     resources/viper4linux-blue.png resources/viper4linux-blue.svg
@@ -110,7 +110,6 @@ install(FILES ${_viper_runtime_python} DESTINATION "lib/viper4linux")
 install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/arch/start-backend"
   DESTINATION "lib/viper4linux")
 install(PROGRAMS
-  "${PROJECT_SOURCE_DIR}/packaging/arch/viper4linux"
   "${PROJECT_SOURCE_DIR}/packaging/arch/viper4linux-output"
   DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
@@ -193,6 +192,7 @@ endif()
 set(_viper_links_code [=[
   foreach(_viper_link IN ITEMS
       "bin/v4l-cli|viper4linux-ctl"
+      "bin/viper4linux|viper4linux-ctl"
       "@_viper_man_link@")
     string(REPLACE "|" ";" _viper_link_parts "${_viper_link}")
     list(GET _viper_link_parts 0 _viper_relative)

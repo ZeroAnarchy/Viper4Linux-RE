@@ -7,7 +7,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 # still run the full suite, as scripts/verify.sh does.
 viper_mock_check=${VIPER_MOCK_SINGLE_CHECK:-all}
 case "$viper_mock_check" in
-    all|tray-contract|native-effect-routing|eq-presets|ir-reader|ddc-reader|native-effect-basic|native-effect-precision|cli-controls|cli-batch|cli-settings|cli-eq-presets|output-state) ;;
+    all|tray-contract|native-effect-routing|eq-presets|ir-reader|ddc-reader|native-effect-basic|native-effect-precision|cli-controls|cli-batch|cli-settings|cli-eq-presets|cli-presets|output-state) ;;
     *) printf 'Unknown mock check: %s\n' "$viper_mock_check" >&2; exit 2 ;;
 esac
 viper_selected() {
@@ -20,7 +20,7 @@ trap 'rm -rf -- "$work" "$config"' EXIT
 # from existing packaging/CI scripts) this runner retains its proven g++ path.
 binary_dir=${VIPER_MOCK_BIN_DIR:-$work}
 if [[ -n ${VIPER_MOCK_BIN_DIR:-} ]]; then
-    for binary in viper_mock.so check check-eq-presets check-ir-reader check-ddc-reader check-cli-controls check-cli-batch check-cli-settings check-cli-eq-presets check-output-state; do
+    for binary in viper_mock.so check check-eq-presets check-ir-reader check-ddc-reader check-cli-controls check-cli-batch check-cli-settings check-cli-eq-presets check-cli-presets check-output-state; do
         if [[ ! -f "$binary_dir/$binary" ]]; then
             echo "Missing CMake-built mock test: $binary_dir/$binary" >&2
             echo 'Run cmake --build <build-dir> --target viper_native_mock_tests first.' >&2
@@ -201,6 +201,16 @@ g++ -pthread -std=c++17 -DVIPER_MOCK_TEST_IPC -O2 -fPIC -Wall -Wextra -Werror -I
   -o "$binary_dir/check-cli-eq-presets" $(pkg-config --libs Qt6Core)
 fi
 XDG_CONFIG_HOME="$config/cli-presets" "$binary_dir/check-cli-eq-presets"
+fi
+
+if viper_selected cli-presets; then
+# Complete effect presets/reset use isolated user settings and a mock IPC page.
+if [[ -z ${VIPER_MOCK_BIN_DIR:-} ]]; then
+g++ -pthread -std=c++17 -DVIPER_MOCK_TEST_IPC -O2 -fPIC -Wall -Wextra -Werror -Isrc \
+  $(pkg-config --cflags Qt6Core) tests/check-cli-presets.cpp \
+  -o "$binary_dir/check-cli-presets" $(pkg-config --libs Qt6Core)
+fi
+XDG_CONFIG_HOME="$config/cli-full-presets" "$binary_dir/check-cli-presets"
 fi
 
 if viper_selected output-state; then

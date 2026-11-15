@@ -64,11 +64,46 @@ if first != second:
         print(f'    first:  {first.get(path)}', file=sys.stderr)
         print(f'    second: {second.get(path)}', file=sys.stderr)
     sys.exit(1)
+# Do not assert a total number of files or symlinks: legitimate packaging
+# additions/removals must not fail a reproducibility check. Assert the actual
+# installed-entrypoint and audio safety contracts instead.
+def require_file(path):
+    if first.get(path, (None,))[0] != 'file':
+        print(f'FAIL: required staged file missing: {path}', file=sys.stderr)
+        sys.exit(1)
+
+def require_link(path, target):
+    entry = first.get(path)
+    if entry is None or entry[0] != 'symlink' or entry[2] != target:
+        print(f'FAIL: required relative symlink {path} -> {target}: {entry}',
+              file=sys.stderr)
+        sys.exit(1)
+
+for filename in (
+    'usr/bin/viper4linux-gui',
+    'usr/bin/viper4linux-ctl',
+    'usr/bin/viper4linux-output-state',
+    'usr/lib/ladspa/viper_dsp_ladspa.so',
+    'usr/lib/viper4linux/start-backend',
+    'usr/lib/viper4linux/viper_output_monitor.py',
+    'usr/share/applications/viper4linux.desktop',
+):
+    require_file(filename)
+require_link('usr/bin/v4l-cli', 'viper4linux-ctl')
+require_link('usr/bin/viper4linux', 'viper4linux-ctl')
+manpages = (
+    ('usr/share/man/man1/v4l-cli.1', 'viper4linux-ctl.1'),
+    ('usr/share/man/man1/v4l-cli.1.gz', 'viper4linux-ctl.1.gz'),
+)
+present = [(name, target) for name, target in manpages if name in first]
+if len(present) != 1:
+    print(f'FAIL: expected one v4l-cli manpage alias, found {present}',
+          file=sys.stderr)
+    sys.exit(1)
+require_link(*present[0])
+
 files = sum(kind[0] == 'file' for kind in first.values())
 links = sum(kind[0] == 'symlink' for kind in first.values())
-if files < 24 or links != 2:
-    print(f'FAIL: incomplete staged payload: {files} files, {links} symlinks', file=sys.stderr)
-    sys.exit(1)
 print(f'PASS: two independent direct CMake stages: {files} files, {links} symlinks; '
-      'matching SHA-256 data, permissions and directory tree')
+      'required entries verified; identical hashes, permissions and tree')
 PY

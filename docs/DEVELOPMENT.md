@@ -14,10 +14,11 @@
 - `src/viper-theme.h`, `src/viper-named-presets.h`,
   `src/viper-preset-dialog.h`, `src/gui-single-instance.h`: extracted
   theme/preset utilities and a new single-GUI owner guard.
-- `src/viper-ctl.cpp`: CLI commands for a subset of live controls.
+- `src/viper-ctl.cpp`: full live-effect CLI and native lifecycle dispatcher.
 - `src/viper-control.h`: shared-memory IPC contract used by GUI, backend and CLI.
 - `src/viper-ladspa.cpp`: PipeWire filter-chain LADSPA bridge to ViPERDSP, nonblocking audio-thread handoff.
-- `src/viper_launcher.py`: version-aware backend start/reuse/replacement logic.
+- `src/viper-lifecycle.h`: native, version-aware backend start/reuse/replacement,
+  monitored restarts and explicit CLI GUI-exit IPC. The separate Python launcher is retired.
 - `src/viper-ir-wave.h`, `src/viper-ddc.h`, `src/viper-eq-presets.h`: file/preset readers and support.
 - `resources/`, `routing-config/`, `packaging/arch/`: icons, PipeWire configuration, local Arch packaging.
 - `tests/`: isolated DSP mock, parsing, GUI contract and launcher tests.
@@ -52,7 +53,7 @@ filter-chain template and project fragment into
 does not need the developer's stock filter-chain file, because it sets
 `VIPER_ENABLE_SYSTEM_INSTALL=ON` and defaults routing preparation to OFF.
 
-The source launcher expects the conventional **`build/`** directory. Manual
+The source `./viper4linux` wrapper expects the conventional **`build/`** directory. Manual
 source builds, including full developer CTest builds, use `-B build` so that
 `./viper4linux` and `./viper4linux --preflight` work without build-directory
 overrides, symlinks or additional environment variables. Package build trees
@@ -233,11 +234,13 @@ advanced FET/Multiband compressor controls, Speaker Correction internal filter
 settings, and Bass anti-pop are not independently configurable in the GUI.
 A future Advanced dialog can expose these without expanding the main tabs.
 
-The CLI is more limited than the GUI: it can toggle the effect groups and
-configure selected parameters of Bass, EQ, Clarity, Spectrum, surround, limiter,
-AGC/LUFS, Stereo Imager, FET and Multiband compressors, Tube, AnalogX and
-Crossfeed. Individual Dynamic EQ bands, IRS/VDC file selection, complete
-named effect presets, window/tray settings and themes remain GUI-managed.
+The CLI can configure all GUI-exposed DSP effect parameters, including
+Dynamic EQ bands, FET, Multiband and IRS/VDC selection/import. Complete
+named effect presets use the GUI's own versioned INI format and are managed
+under one root command: `--preset` (list), `--preset --help` (alias `--preset help`), plus
+`--preset save|overwrite|load|rename|delete` with positional names.
+`--reset-effects` restores the GUI-equivalent full DSP defaults.
+Window/tray settings and themes remain GUI-managed.
 `viper4linux-output` separately handles remembered physical outputs and
 assignment of full named effect presets to them.
 

@@ -51,7 +51,7 @@ assert 'install -Dm755' not in build_script
 assert 'dpkg-shlibdeps -O' in build_script
 assert 'dpkg-deb --build --root-owner-group' in build_script
 assert 'apt-get install -y --no-install-recommends "$package"' in build_script
-assert 'python3 /usr/lib/viper4linux/viper_launcher.py --fingerprint' in build_script
+assert 'viper4linux --fingerprint' in build_script
 assert 'usr/lib/ladspa/viper_dsp_ladspa.so' in build_script
 assert 'qt6-qpa-plugins' in build_script
 assert 'v4l-cli --help >/dev/null' in build_script

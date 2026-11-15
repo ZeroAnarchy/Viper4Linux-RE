@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real, headless two-process test of the same Qt guard used by the GUI."""
 import os
+import socket
 from pathlib import Path
 import subprocess
 import sys
@@ -8,19 +9,9 @@ import tempfile
 import time
 
 root = Path(__file__).resolve().parents[1]
-gui = (root / "src/viper-gui.cpp").read_text()
-cmake = (root / "CMakeLists.txt").read_text()
-assert '#include "gui-single-instance.h"' in gui
-assert 'guiInstance.claim(waylandActivationToken);' in gui
-assert 'instance == ViperGuiInstance::StartResult::Forwarded) {' in gui
-assert 'viper_startup::completeX11Startup(x11StartupId);' in gui
-assert 'if (!window.isVisible() &&' in gui
-assert 'QTimer::singleShot(0, &window, [x11StartupId]' in gui
-assert 'if (trayAvailable()) return;' in gui
-assert 'app.setDesktopFileName("viper4linux");' in gui
-assert 'window.activateFromSecondLaunch();' in gui
-assert 'void activateFromSecondLaunch() { restoreFromTray(); }' in gui
-assert "Qt6::Widgets Qt6::Network" in cmake
+
+# Test real Qt socket/lock behavior with two processes; do not match private
+# C++ expression strings or implementation-specific whitespace.
 
 with tempfile.TemporaryDirectory(prefix="viper-single-gui-") as temp:
     tmp = Path(temp)
@@ -76,11 +67,40 @@ with tempfile.TemporaryDirectory(prefix="viper-single-gui-") as temp:
         else:
             raise AssertionError("Second-instance activation token was not forwarded")
 
+    def cli_quit(choice, expected):
+        address = str(runtime / "viper4linux-re-gui.sock")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(3)
+            client.connect(address)
+            client.sendall(f"V4L-QUIT/1 {choice}\n".encode())
+            response = bytearray()
+            while not response.endswith(b"\n"):
+                chunk = client.recv(40)
+                if not chunk:
+                    break
+                response.extend(chunk)
+                assert len(response) <= 40, "Unexpected oversized GUI IPC response"
+            assert bytes(response) == expected
+        if expected == b"OK\n":
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                record = markers / "requested-quit"
+                if record.exists() and f"{choice}\n".encode() in record.read_bytes():
+                    break
+                time.sleep(0.02)
+            else:
+                raise AssertionError("GUI control request was not delivered")
+
     primary = start()
     try:
         wait_for(markers / "ready", primary)
         second()
         assert primary.poll() is None, "second launch terminated the first GUI"
+        cli_quit("keep", b"OK\n")
+        cli_quit("stop", b"OK\n")
+        cli_quit("garbage", b"ERROR\n")
+        assert (markers / "requested-quit").read_bytes() == b"keep\nstop\n"
+        assert primary.poll() is None, "Harness quit request must not stop fake GUI"
         # SIGKILL leaves both the lock and socket behind; a fresh primary
         # must recover them and still refuse later duplicate windows.
         primary.kill()

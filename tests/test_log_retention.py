@@ -93,8 +93,8 @@ class LogRetentionTests(unittest.TestCase):
         for script in ("scripts/start.sh", "packaging/arch/start-backend"):
             source = (ROOT / script).read_text()
             self.assertIn("|| cat >/dev/null", source)
-        launcher = (ROOT / "src/viper_launcher.py").read_text()
-        self.assertIn('"$1" "$2" stream output-monitor || cat >/dev/null', launcher)
+        controller = (ROOT / "src/viper-lifecycle.h").read_text()
+        self.assertIn('stream output-monitor || cat >/dev/null', controller)
 
     def test_stream_writer_combines_backend_and_monitor_records(self):
         # Use a fresh timestamp: the stream writer applies seven-day

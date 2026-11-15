@@ -35,6 +35,21 @@ On first use, an existing pre-library one-slot preset is imported as
 **Previously Saved Preset**. This migration happens only once; users without
 an older preset do not get a fictitious imported entry.
 
+The full-effect preset library is also available through the top-level
+`v4l-cli --preset` command, which lists presets by default. Use
+`v4l-cli --preset --help` (or `--preset help`) for the available actions:
+`--preset save NAME`, `--preset overwrite NAME`, `--preset load NAME`,
+`--preset rename OLD NEW` and `--preset delete NAME`.
+These are standalone preset operations (not effect selectors); names with spaces
+need shell quotes. **Save** refuses duplicates, and **overwrite** must be
+explicit. Save/load/overwrite require an active DSP channel; list, rename and
+delete work offline. `v4l-cli --reset-effects` independently restores all
+GUI-equivalent effect defaults without prompting, so save a preset first if
+you want to keep the current sound. The GUI's Reset confirmation still defaults
+to Cancel. Named format-v1 presets use the GUI's slider precision: finer
+native CLI overrides in the `precision/` settings group are not embedded,
+and a complete preset load or reset clears them.
+
 The Graphic EQ also maintains **separate named EQ curve presets** inside its
 editor. Those are not full-effect snapshots and remain stored in GUI settings.
 The chosen EQ curve identity is retained in new named effect presets and

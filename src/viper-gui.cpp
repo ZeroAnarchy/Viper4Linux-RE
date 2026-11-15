@@ -621,6 +621,9 @@ public:
     }
     // Public entry used only when a second launch asks us to show this window.
     void activateFromSecondLaunch() { restoreFromTray(); }
+    bool requestQuitFromCli(bool stopBackend) {
+        return quitGui(stopBackend ? QStringLiteral("stop") : QStringLiteral("keep"));
+    }
     void showAtStartup() {
         const QString choice = settings_.value("ui/startupBehavior", "show").toString();
         if (choice == "tray") {
@@ -1014,6 +1017,8 @@ int main(int argc, char* argv[]) {
             qputenv("XDG_ACTIVATION_TOKEN", token);
         window.activateFromSecondLaunch();
         qunsetenv("XDG_ACTIVATION_TOKEN");
+    }, [&window](bool stopBackend) {
+        return window.requestQuitFromCli(stopBackend);
     });
     window.showAtStartup();
     // A successful start-in-tray does not map a regular top-level window.

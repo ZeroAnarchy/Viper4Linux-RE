@@ -18,7 +18,6 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-import viper_launcher
 import viper_output_monitor
 
 STAMP = re.compile(r"^\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})\]")
@@ -33,13 +32,14 @@ def check_stamp(line: str) -> None:
 
 
 class BackendLifecycleLogTests(unittest.TestCase):
-    def test_launcher_timestamp_record(self):
+    def test_native_lifecycle_timestamp_record(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"XDG_STATE_HOME": tmp}):
-                viper_launcher.record_backend_event("test backend stop requested")
+                subprocess.run([sys.executable, str(ROOT / "src/viper_log_retention.py"),
+                                "record", "test backend stop requested"], check=True)
             line = (Path(tmp) / "viper4linux/backend.log").read_text().strip()
             check_stamp(line)
-            self.assertIn("[launcher] test backend stop requested", line)
+            self.assertIn("[native-lifecycle] test backend stop requested", line)
 
     def test_output_monitor_timestamp(self):
         output = io.StringIO()

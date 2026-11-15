@@ -231,6 +231,9 @@ def main() -> int:
     setter.add_argument("days", type=int)
     actions.add_parser("get-days")
     actions.add_parser("prune")
+    actions.add_parser("migrate")
+    event = actions.add_parser("record")
+    event.add_argument("message")
     args = parser.parse_args()
     if args.action == "stream":
         return stream(args.name)
@@ -241,6 +244,11 @@ def main() -> int:
         prune_all()
     elif args.action == "prune":
         prune_all()
+    elif args.action == "migrate":
+        migrate_legacy_monitor()
+    elif args.action == "record":
+        timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        append_line("backend", f"[{timestamp}] [native-lifecycle] {args.message}")
     return 0
 
 
