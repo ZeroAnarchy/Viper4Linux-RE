@@ -3,6 +3,7 @@
 #include "viper-control.h"
 #include "viper-precision-units.h"
 #include "viper-backend-state.h"
+#include "gui-audio-status.h"
 #include "gui-backend-exit.h"
 #include "sync/gui-control-channel.h"
 #include "viper-eq-presets.h"

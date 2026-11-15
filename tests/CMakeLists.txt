@@ -215,6 +215,19 @@ add_test(NAME viper_contract_audio_activity
 set_tests_properties(viper_contract_audio_activity PROPERTIES
   WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" LABELS "developer;contracts")
 
+# GUI-facing status semantics and two-color rendering, entirely offline.
+# The test consumes the same presenter as the running GUI; it never relies
+# on source text or an active PipeWire session.
+add_executable(viper_test_gui_audio_status check-gui-audio-status.cpp)
+target_include_directories(viper_test_gui_audio_status PRIVATE "${_viper_test_include}")
+target_link_libraries(viper_test_gui_audio_status PRIVATE Qt6::Core Qt6::Gui)
+target_compile_options(viper_test_gui_audio_status PRIVATE
+  -O2 -UNDEBUG -Wall -Wextra -Werror)
+add_test(NAME viper_contract_gui_audio_status
+  COMMAND "$<TARGET_FILE:viper_test_gui_audio_status>")
+set_tests_properties(viper_contract_gui_audio_status PROPERTIES
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" LABELS "developer;contracts")
+
 foreach(_viper_script IN ITEMS
     check-native-state-contract
     check-precision-persistence-contract
