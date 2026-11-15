@@ -1,5 +1,11 @@
 # Native DSP Backend Modularization Plan
 
+> **Archived design and acceptance record (November 2026).** The backend
+> modularization was completed and merged as PR #3; the checkpoint status
+> and future-tense merge instructions below describe the original work,
+> not an open v1.2.0 task. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
+> current architecture and test workflow.
+
 > **Historical test commands:** References to `tests/check-developer.sh`
 > below document earlier executed checkpoints, not the current workflow.
 > The wrapper was retired after the complete 46/46 CTest suite passed.

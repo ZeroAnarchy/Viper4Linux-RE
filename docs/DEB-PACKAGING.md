@@ -47,7 +47,7 @@ on a live host without an approved packaging environment.
 ## Prepare release assets
 
 For each new version, manually dispatch **Actions → Prepare stable release**
-and enter the version without the `v` prefix (for example, `1.1.0`).
+and enter the version without the `v` prefix (for example, `1.2.0`).
 
 1. The `prepare` job exports the recorded submodule into the unified source,
    generates the checksum and stable PKGBUILD, then compiles and tests the Arch
@@ -76,12 +76,14 @@ For a desktop install, users can open the matching `.deb` in their graphical
 package manager or use `sudo apt install ./filename.deb` to resolve runtime
 dependencies. They must have an operational **PipeWire** audio session;
 PulseAudio-only setups are not supported. The GUI can be started with
-`viper4linux` and the CLI with `viper4linux-ctl`.
+`viper4linux` and the native CLI with `v4l-cli` (also available as
+`viper4linux-ctl`). The application launcher itself is native; Python
+remains needed by the Audio Output monitor and related support modules.
 
 This package deliberately uses the same `viper4linux-re` package name and
-filesystem paths as the native Arch release. The published 1.0.0 source and
-all three downstream DSP patches are preserved; no DSP changes are made to
-create a Debian-family package. The two `.deb` packages successfully built in GitHub Actions for 1.0.0;
+filesystem paths as the native Arch release. The published 1.0.0 packaging history remains preserved; current releases
+use the maintained set of downstream DSP patches without adding DSP changes
+solely for Debian packaging. The two `.deb` packages successfully built in GitHub Actions for 1.0.0;
 Mint-specific GUI, routing and tray behavior still requires direct testing.
 
 ## Extending support

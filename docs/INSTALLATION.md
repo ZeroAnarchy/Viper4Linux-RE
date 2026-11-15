@@ -163,13 +163,42 @@ The launcher starts or reuses the application's audio backend and Audio Output m
 For CLI diagnostics:
 
 ```bash
-viper4linux-ctl status
-viper4linux-ctl --help
+v4l-cli --status
+v4l-cli --status --full
+v4l-cli --help
 ```
+
+`viper4linux-ctl` is the longer name for the same native controller. To
+change individual DSP effects, use effect-scoped syntax, for example
+`v4l-cli --bass on gain=3`; see the [user guide](USER-GUIDE.md).
+The installed `viper4linux` launcher also uses the native controller,
+not the older Python launcher.
 
 If the status reports **Ready to process audio**, the backend process exists but the audio-control channel is not yet ready. If it persists, consult the [user guide](USER-GUIDE.md) and backend logs (usually `~/.local/state/viper4linux/backend.log`). An advancing audio callback counter indicates processing activity, not necessarily audible sound. Audio Output memory is opt-in and disabled by default.
 
 ## Updating
+
+### Upgrading from v1.1.3 to v1.2.0
+
+v1.2.0 replaces the previous Python application launcher with the native
+controller and expands the effect-scoped CLI. Existing GUI settings, named
+presets, imported IRS/VDC files and Audio Output memories stay in the same
+per-user locations. Before upgrading, keep a backup of
+`~/.config/ViPERforLinux/` and `~/.local/share/viper4linux/`
+(or the corresponding XDG config/data directories).
+
+An older marked ViPER backend may remain running through package replacement;
+**launching** the upgraded controller can then stop/replace that backend if
+its build fingerprint differs. This can briefly interrupt audio, but it
+must never restart system PipeWire. After package installation, run
+`viper4linux --preflight` first to view the proposed START/REUSE/REPLACE
+action without changing anything. Launch `viper4linux` only when ready for
+a possible audio handoff, then confirm the GUI opens, the Audio Output monitor
+runs, and saved DSP settings and presets reappear. New scripts should use
+`v4l-cli --effect option=value` rather than older value-taking
+positional commands.
+
+### Update methods
 
 - **Arch stable AUR:** Use your AUR helper's normal package-update procedure, or update the AUR Git checkout and rebuild with `makepkg -si`.
 - **Arch development AUR:** Rebuild against current upstream commits using your helper's VCS/development update procedure or an updated AUR Git checkout. A development package may have new upstream commits even when its AUR recipe has not changed.

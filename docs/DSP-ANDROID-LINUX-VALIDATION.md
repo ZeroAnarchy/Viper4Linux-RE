@@ -1,5 +1,12 @@
 # Android–Linux DSP Validation
 
+> **Historical test campaign (November 10–12, 2026).** The checkpoints,
+> branch instructions and pending-merge language below record their state
+> when the individual DSP tests were performed. The verified corrections
+> incorporated into v1.1.3 are already part of current `main`; do not
+> interpret those earlier integration gates as new v1.2.0 blockers.
+> Numerical parity and live desktop compatibility remain distinct claims.
+
 This document records direct comparisons between **ViPER4Linux-RE** on Arch Linux and the installed **ViPER4Android-RE** audio driver on Android. The objective is to check that each effect behaves as intended, identify discrepancies, and improve the Linux implementation where justified. **A matching output is evidence of parity, not proof that either implementation is inherently better.**
 
 Both test programs create *isolated* DSP instances. They do not alter active playback settings or audio routing.

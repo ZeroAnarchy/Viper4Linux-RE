@@ -8,8 +8,8 @@
   Spatial, Dynamics and Sound Correction).
 - `src/widgets/`: reusable effect widgets, compact EQ previews, Graphic/Dynamic
   EQ popup editors and IRS selector.
-- `src/window/`: seven ViperWindow-owned implementation sections for
-  presets, layout, correction, shell/tray, Graphic EQ, dynamics and effects.
+- `src/window/`: eight ViperWindow-owned implementation sections for
+  presets, initialization, layout, correction, shell/tray, Graphic EQ, dynamics and effects.
 - `src/sync/`: settings/backend bridges and precision/reconnect policies.
 - `src/viper-theme.h`, `src/viper-named-presets.h`,
   `src/viper-preset-dialog.h`, `src/gui-single-instance.h`: extracted
@@ -400,6 +400,33 @@ GUI modularization plan:
 Track any outcomes here or in a targeted compatibility issue. Do not
 reopen the completed GUI extraction plan merely for these items.
 
+## v1.2.0 integration and release-candidate gate
+
+The post-v1.1.3 work includes the effect-scoped CLI rewrite, native
+launcher/lifecycle controller, full named-preset management, extended
+DSP parameters, explicit tray exit controls and improved GUI status
+presentation. PR #43 (CLI/lifecycle) and PR #45 (GUI status colors)
+were merged on November 15, 2026. These items are not a new ViPERDSP
+upstream engine version or a rewrite of the PipeWire processing path.
+
+Before **publishing v1.2.0**, verify the *combined* `main` tree using
+the Arch, Ubuntu/Mint and Debian/LMDE package/CTest and installation
+smoke workflows. The separate PR CI runs do not, on their own, certify
+the combined branch. The maintainer's live v1.1.3 → current-development
+package upgrade should confirm the native launcher recognizes an old
+marked backend, performs the required ViPER-only replacement, and
+preserves GUI preferences, named presets, imported IRS/VDC selections
+and physical Audio Output memories. Preserve `--preflight` as a
+read-only step before intentionally triggering an audio handoff.
+
+After validation, review the v1.2.0 changelog and user-facing commands,
+run **Prepare stable release** from the exact intended commit, check
+`SOURCE-COMMIT`, the pinned ViPERDSP source, all three package
+installations and the consolidated `SHA256SUMS`. Resolve third-party
+redistribution review separately; the release workflow prepares
+artifacts but does not create a tag, publish a release, or update the
+separate stable/VCS AUR recipes.
+
 ## Cleanup decisions
 
 Historical layout notes, one-off milestone release notes and repeated
@@ -413,10 +440,11 @@ was deleted; the PNG variants and blue SVG are used by Qt/Arch packaging.
 The repository's local PKGBUILD is a **development** recipe, separate from
 the already published AUR `viper4linux-re-git` package. Keep AUR metadata
 and release assets distinct; documentation cleanup should not redesign
-either recipe. Remaining *stable-release* work includes maintainer review,
-tag/release publication decisions, redistribution/license review and real
-KDE tray testing. GitHub Actions has already verified the release-candidate
-source archive and native package builds.
+either recipe. Remaining *v1.2.0 stable-release* work is tracked in the release-candidate
+gate above: real upgrade acceptance, final combined-tree CI and package
+validation, reviewed documentation, third-party notices, and explicit
+tag/release/AUR publication decisions. KDE tray testing remains a
+separate broader-compatibility follow-up rather than an automatic blocker.
 
 The project's history was tracked from a later development snapshot rather
 than from its earliest non-Git prototypes. Previous experiments and notes can
