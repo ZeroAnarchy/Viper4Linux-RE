@@ -594,24 +594,17 @@
             static_cast<pid_t>(control->owner_pid.load(std::memory_order_relaxed)),
             control->audio_callbacks.load(std::memory_order_relaxed),
             control->input_signal_blocks.load(std::memory_order_relaxed));
-        switch (state) {
-        case viperbass::BackendAudioActivity::Active:
-            status_->setText("● Processing audio — input signal detected");
-            status_->setStyleSheet("color: #209454;");
-            break;
-        case viperbass::BackendAudioActivity::NoSignal:
-            status_->setText("○ Connected — no audio signal (DSP ready)");
-            // Blue distinguishes connected silence from green input activity and muted idle.
-            status_->setStyleSheet(palette().color(QPalette::Window).lightness() < 130
-                ? "color: #75B9F4;" : "color: #2B75B8;");
-            break;
-        case viperbass::BackendAudioActivity::Idle:
-            status_->setText("○ Connected — idle (effects processor ready)");
-            status_->setStyleSheet(QString("color:%1;").arg(theme_muted_color_));
-            break;
-        case viperbass::BackendAudioActivity::Checking:
-            status_->setText("○ Connected — checking audio activity…");
-            status_->setStyleSheet(QString("color:%1;").arg(theme_muted_color_));
-            break;
-        }
+        // Report what the backend is actually doing, not only what the GUI
+        // switch last displayed. CLI edits can change master_enabled between
+        // GUI polls. Audio is still detected when effects are bypassed.
+        const bool masterEnabled =
+            control->master_enabled.load(std::memory_order_relaxed) != 0;
+        const bool darkTheme = palette().color(QPalette::Window).lightness() < 130;
+        const auto presentation =
+            viperbass::guiAudioStatus(state, masterEnabled, darkTheme);
+        // Rich text permits green connection/activity and a yellow bypass
+        // notice on the same line. Clear older single-color QLabel styles.
+        status_->setStyleSheet(QString());
+        status_->setTextFormat(Qt::RichText);
+        status_->setText(presentation.html());
     }

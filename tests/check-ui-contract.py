@@ -57,9 +57,8 @@ assert "const int beforeNativeLowX = dyn_xlo_native_;" in source
 assert "if (before != liveUiSnapshot() || beforeNativeLowX != dyn_xlo_native_) persistCurrentSettings();" in source
 assert "if (before != liveUiSnapshot()) publishToBackend();" not in source
 
-# A connected but silent backend must not be presented as active audio.
-bridge = (root / "src/sync/gui-backend-bridge.inc").read_text()
-assert "Connected — no audio signal (DSP ready)" in bridge
+# Connected/silent, active, and bypassed statuses are validated by the
+# offline native gui-audio-status presenter test, not private source strings.
 # Dynamic EQ selection/editing, saved state and signal suppression.
 plot = (root / "src/widgets/eq-overviews.h").read_text().split("class DynamicEqOverview final", 1)[1]
 assert "selectBand(nearest)" in plot
