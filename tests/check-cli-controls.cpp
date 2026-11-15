@@ -131,6 +131,10 @@ int main() {
     assert(mb.makeup_db.load() == 4 && mb.attack_ms.load() == 25);
     assert(mb.release_ms.load() == 160 && c.mb_request_serial.load() > mbBefore);
     assert(invoke({"--mb", "band=6:ratio:3"}) == 2);
+    // The generic worker-value test below exercises a real 3-to-5 layout
+    // change. Restore the initial count after the dedicated five-band checks.
+    assert(invoke({"--mb", "bands=3"}) == 0);
+    assert(c.mb_band_count.load() == 3);
     // Validate complete multi-command sequences before executing any part.
     c.master_enabled.store(0);
     c.enabled.store(0);
