@@ -71,6 +71,8 @@ This is a working proof of concept, not a finished commercial product. I'm
 sharing it because I believe there's still a place for ViPER on Linux, and I'd
 like to see what the community can make of it.
 
+Join us on [Telegram](https://t.me/Viper4Linux_RE) for further assistance.
+
 > **Development status:** This project is under active development. Arch Linux with Cinnamon/X11 is the
 > primary tested environment; KDE Plasma tray integration and other Linux
 > environments need further testing. See [Current limitations](#current-limitations). Extensive testing comparing ViPER4Linux-RE with ViPER4Android-RE has now been completed across all 24 effect groups. Results demonstrate that audio output is generally identical or extremely close to ViPER4Android-RE under the tested conditions, suggesting that audible differences should be negligible in most cases. Any identified discrepancies, corrections, and remaining limitations are documented in the [Validation Test History](https://github.com/username227/Viper4Linux-RE/blob/main/docs/DSP-ANDROID-LINUX-VALIDATION.md). If you discover any audio processing errors or see opportunities for improvement, bug reports and suggestions are always welcome!
