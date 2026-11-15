@@ -22,20 +22,24 @@ Open **☰ → Preferences** to configure:
 - Title-bar minimize: normal taskbar minimize or minimize to tray.
 - Close (X): quit the GUI, minimize to taskbar, or hide to tray.
 - When quitting: ask every time (default), always keep the backend running, or
-  stop the backend. This setting also applies to the menu and tray **Quit GUI**.
+  stop the backend. This setting applies to **Quit GUI** in the application menu
+  and to close (X) when configured to quit; explicit tray exit actions override it.
 - Optional login autostart using the user's XDG autostart directory.
 
 Preferences are grouped into **Startup**, **Window & tray behavior**, **GUI exit & audio backend**, and **Audio Output memory**. The dialog can be resized and remembers its size on OK or Cancel. On shorter screens, settings scroll while the action buttons remain visible. **Restore Defaults** resets the dialog's selections to their defaults; changes are applied only after OK, and existing Audio Output snapshots and named presets are not deleted.
 
 The tray menu provides Show/Hide, the Master processing toggle, Preferences,
-and Quit GUI. The tray click action toggles window visibility. If Qt reports
+and two explicit exit actions: **Quit GUI & Leave ViperDSP Running** and
+**Quit GUI & Close ViperDSP Completely**. Neither prompts for a backend
+choice or changes the remembered quit preference. The tray click action toggles window visibility. If Qt reports
 no usable system tray, the application should keep its window accessible rather
 than hide it permanently. On Cinnamon/X11 the black taskbar-window regression
 was fixed by not clearing the minimized state after hiding the window.
 KDE Plasma tray behavior remains to be verified on a real KDE session.
 
-When the GUI actually exits while a ViPER backend is running, it asks whether
-to **Keep backend running**, **Stop backend**, or **Cancel**. Check
+When quitting through the application menu or close (X), if its configured
+exit policy is **Ask every time** and the ViPER backend is running, the GUI
+prompts to **Keep backend running**, **Stop backend**, or **Cancel**. Check
 **Remember this choice** to skip future prompts; to change it later, return
 to **Preferences → When quitting the GUI** and select **Ask every time**,
 **Keep audio backend running**, or **Stop audio backend**.

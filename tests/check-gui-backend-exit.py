@@ -13,9 +13,9 @@ assert '#include "gui-backend-exit.h"' in gui
 assert 'viper_gui_exit::stopMarkedBackend(backendPid, error)' in shell
 assert 'viperbass::running_backend_pid()' in shell
 assert 'Remember this choice' in shell and 'ui/backendOnExit' in shell
-assert 'if (!prepareBackendForGuiExit()) return;' in shell
+assert 'if (!prepareBackendForGuiExit(explicitDecision)) return;' in shell
 assert 'if (backendPid <= 0) return true;' in shell
-decide = shell[shell.index('bool prepareBackendForGuiExit()'):shell.index('void quitGui()')]
+decide = shell[shell.index('bool prepareBackendForGuiExit('):shell.index('void quitGui(')]
 assert 'else return false;' in decide  # Cancel leaves GUI open.
 assert 'setDefaultButton(keepButton)' in decide
 assert 'setEscapeButton(cancelButton)' in decide

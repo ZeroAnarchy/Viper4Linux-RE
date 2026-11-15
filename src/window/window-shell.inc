@@ -28,11 +28,13 @@
         activateWindow();
     }
     // Called only on actual GUI exit, never on hide/minimize.
-    bool prepareBackendForGuiExit() {
+    bool prepareBackendForGuiExit(const QString& explicitDecision = QString()) {
         const pid_t backendPid = viperbass::running_backend_pid();
         if (backendPid <= 0) return true; // No backend to keep or stop.
 
-        QString decision = settings_.value("ui/backendOnExit", "ask").toString();
+        QString decision = explicitDecision.isEmpty()
+            ? settings_.value("ui/backendOnExit", "ask").toString()
+            : explicitDecision;
         bool remember = false;
         QWidget* promptParent = isVisible() ? static_cast<QWidget*>(this) : nullptr;
         if (decision != "keep" && decision != "stop") {
@@ -72,13 +74,13 @@
         }
         return true;
     }
-    void quitGui() {
+    void quitGui(const QString& explicitDecision = QString()) {
         if (audio_restart_process_) {
             QMessageBox::information(this, "Restarting Audio Engine",
                 "The audio engine restart is still in progress. Quit once it finishes.");
             return;
         }
-        if (!prepareBackendForGuiExit()) return;
+        if (!prepareBackendForGuiExit(explicitDecision)) return;
         saveUiGeometry();
         qApp->quit(); // Only an explicit Stop choice signals the marked backend.
     }
@@ -174,8 +176,14 @@
         auto* prefs = menu->addAction("Preferences…");
         connect(prefs, &QAction::triggered, this, [this] { showPreferences(); });
         menu->addSeparator();
-        auto* quit = menu->addAction("Quit GUI");
-        connect(quit, &QAction::triggered, this, [this] { quitGui(); });
+        // Explicit tray choices override the remembered exit policy for this quit only.
+        // Escape literal ampersands for QMenu mnemonic handling.
+        auto* quitKeep = menu->addAction("Quit GUI && Leave ViperDSP Running");
+        connect(quitKeep, &QAction::triggered, this,
+                [this] { quitGui(QStringLiteral("keep")); });
+        auto* quitStop = menu->addAction("Quit GUI && Close ViperDSP Completely");
+        connect(quitStop, &QAction::triggered, this,
+                [this] { quitGui(QStringLiteral("stop")); });
         tray_icon_->setContextMenu(menu);
         connect(tray_icon_, &QSystemTrayIcon::activated, this,
                 [this](QSystemTrayIcon::ActivationReason reason) {
@@ -394,7 +402,7 @@
 
         auto* exitBox = new QGroupBox(page);
         auto* exitLayout = configureSection(exitBox, "GUI exit & audio backend", "prefs_backend");
-        exitLayout->addWidget(new QLabel("When quitting the GUI (menu, tray or close X):", exitBox));
+        exitLayout->addWidget(new QLabel("When quitting via the application menu or close (X):", exitBox));
         auto* exitGroup = new QButtonGroup(&dialog);
         auto* exitAsk = new QRadioButton("Ask every time", exitBox);
         auto* exitKeep = new QRadioButton("Keep audio backend running", exitBox);
