@@ -97,7 +97,10 @@ class LogRetentionTests(unittest.TestCase):
         self.assertIn('"$1" "$2" stream output-monitor || cat >/dev/null', launcher)
 
     def test_stream_writer_combines_backend_and_monitor_records(self):
-        line = b"[2026-11-08T09:00:00-05:00] [backend pid=4] diagnostic\n"
+        # Use a fresh timestamp: the stream writer applies seven-day
+        # retention immediately, so a fixed historical fixture expires.
+        stamp = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+        line = f"[{stamp}] [backend pid=4] diagnostic\n".encode("utf-8")
         result = subprocess.run(
             [sys.executable, str(ROOT / "src/viper_log_retention.py"),
              "stream", "backend"],
