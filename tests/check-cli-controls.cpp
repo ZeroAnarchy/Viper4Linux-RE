@@ -364,6 +364,10 @@ int main() {
         run(off);
         assert(flag.load() == 0 && serial.load() == first + 2);
     };
+    // Earlier FET parity checks leave FET enabled; restore the initial
+    // disabled state expected by the generic worker-toggle test.
+    run("fet-off");
+    assert(c.fet_enabled.load() == 0);
     checkWorker("deq-on", "deq-off", c.deq_enabled, c.deq_request_serial);
     checkWorker("tube-on", "tube-off", c.tube_enabled, c.tube_request_serial);
     checkWorker("analogx-on", "analogx-off", c.analogx_enabled, c.analogx_request_serial);

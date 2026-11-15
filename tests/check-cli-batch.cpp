@@ -152,6 +152,10 @@ int main() {
         const std::string option = legacy.substr(dash + 1);
         std::string value;
         if (spec.kind == viperbass::cli_batch::Kind::Name) value = "Acoustic";
+        else if (spec.kind == viperbass::cli_batch::Kind::DeqBands) value = "3";
+        else if (spec.kind == viperbass::cli_batch::Kind::DeqBand) value = "1:gain:0";
+        else if (spec.kind == viperbass::cli_batch::Kind::MbBand) value = "1:ratio:2";
+        else if (spec.kind == viperbass::cli_batch::Kind::MbCrossover) value = "1:500";
         else if (spec.kind == viperbass::cli_batch::Kind::EqLevel) value = "2:-1.5";
         else if (spec.kind == viperbass::cli_batch::Kind::EqBands) value = "15";
         else if (spec.kind == viperbass::cli_batch::Kind::MbBands) value = "3";
