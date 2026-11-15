@@ -92,7 +92,13 @@ After updating an AUR checkout, regenerate `.SRCINFO` with
 publication happens separately with the next release.
 
 Personal settings, presets, and IRS/VDC files remain in user directories and
-should survive package replacement. If an old source checkout installed a
+should survive package replacement. From v1.2.0 onward, installed
+`viper4linux` invokes the native controller; the previous Python application
+launcher is no longer packaged. Keep `python3` as an installed runtime
+requirement for the Audio Output monitor and supporting Python modules.
+For the v1.1.3 → v1.2.0 upgrade, validate `viper4linux --preflight` after
+package installation and before launching: a fingerprint mismatch can require
+a ViPER-only backend restart, not a system PipeWire restart. If an old source checkout installed a
 launcher symlink, use `type -a viper4linux` to ensure it does not shadow
 `/usr/bin/viper4linux`.
 
@@ -100,7 +106,7 @@ launcher symlink, use `type -a viper4linux` to ensure it does not shadow
 
 | Package | Source | Versioning |
 |---|---|---|
-| `viper4linux-re` | Published versioned source tarball | Fixed release number (`1.1.0-1`, etc.) |
+| `viper4linux-re` | Published versioned source tarball | Fixed release number (for example, `1.2.0-1`) |
 | `viper4linux-re-git` | Published Git remote | Commit-derived VCS `pkgver()` |
 
 The stable package should not need a Git checkout to build; its sources,
@@ -167,11 +173,11 @@ without GitHub Actions:
 
 ```bash
 mkdir -p release-candidate
-bash scripts/prepare-stable-release.sh 1.1.1 "$PWD/release-candidate"
+bash scripts/prepare-stable-release.sh 1.2.0 "$PWD/release-candidate"
 ```
 
 The resulting source archive contains the pinned, unpatched upstream DSP.
 The stable PKGBUILD now lets CMake verify the upstream revision and apply
-all three DSP compatibility patches to a **private** build copy. The source
+all currently required DSP compatibility patches to a **private** build copy. The source
 archive and its upstream dependency remain unmodified. The full Arch packaging test requires an Arch environment with pacman,
 Qt6, CMake and the other declared dependencies.

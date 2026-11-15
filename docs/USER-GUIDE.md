@@ -74,31 +74,39 @@ a second GUI. A successful exit waits for the new Audio Output monitor's
 fresh heartbeat. CLI-driven quit operations do not alter remembered
 GUI exit preferences.
 
-
-
 The installed native controller is `viper4linux-ctl`, with the shorter `v4l-cli`
 symlink providing the same commands and options. Try:
 
 ```bash
-viper4linux-ctl status
-v4l-cli status
-viper4linux-ctl off
-viper4linux-ctl on
-viper4linux-ctl bass-off
-viper4linux-ctl bass-on
-viper4linux-ctl --help
+v4l-cli --status
+v4l-cli --status --full
+v4l-cli --off                     # Bypass Master processing
+v4l-cli --on                      # Enable Master processing
+v4l-cli --bass on gain=3 freq=65  # Enable and adjust ViPER Bass
+v4l-cli --headphone on level=2    # Headphone Surround+ Level 2
+v4l-cli --preset list
+v4l-cli --preset --help
+v4l-cli --help
 man viper4linux-ctl
 ```
+The longer `viper4linux-ctl` command accepts the same arguments.
+Use `v4l-cli --EFFECT --help` (for example, `--deq --help`) for
+effect-specific choices and ranges.
 
 Backend status distinguishes the following conditions:
 
-- **Processing audio (GUI):** DSP callbacks are active and the incoming
-  audio signal exceeded about -80 dBFS in recent blocks. This detects real
-  input samples, **not** necessarily audible output (muting or output routing
-  can still prevent sound). A short ~1.5-second grace reduces flicker during rests.
+- **Processing audio / Audio detected (GUI):** DSP callbacks are active and
+  the incoming audio signal exceeded about -80 dBFS in recent blocks.
+  With Master ON, the status reads **Processing audio — input signal detected**
+  in green. With Master OFF, it reads **Audio detected** in green followed by
+  **effects bypassed** in yellow. This detects input samples, **not**
+  necessarily audible output (muting or output routing can still prevent sound).
+  A short ~1.5-second grace reduces flicker during rests.
 - **Connected — no audio signal (GUI):** DSP callbacks continue under
   `node.always-process = true`, but no input above the detection floor was
-  seen recently. Paused Elisa or other silent players should reach this state.
+  seen recently. Connected/readiness text is green; with Master OFF the
+  yellow **effects bypassed** suffix also appears. Paused or silent players
+  should reach this state.
 - **Connected — idle (GUI):** the DSP channel is present but its audio callback
   counter has not advanced since the previous GUI poll; effects are ready.
 - **Connected — checking audio activity (GUI):** the first sample after attaching
@@ -129,7 +137,7 @@ preceding the new logging format cannot be aged precisely: they are
 conservatively treated as belonging to the first subsequent timestamped
 entry. The duration is a retention period, not a fixed disk-space quota.
 
-`viper4linux-ctl status` is instantaneous and reports the current callback
+`v4l-cli --status` is instantaneous and reports the current callback
 counter rather than claiming active/idle from a single sample. Run it twice
 if you need to check whether the number is increasing. The GUI observes changes
 automatically. Closing a music player does not unload or restart the DSP.
@@ -143,20 +151,26 @@ successful changes to the same per-user Qt settings store as the GUI, even when
 the GUI is closed. It manages complete named effect presets with
 `--preset` (list) and `--preset --help` (also `--preset help`: save, overwrite, load, rename and
 delete syntax), imports/selects IRS/VDC files, and exposes a standalone
-`--reset-effects` command. Unlike the GUI button,
-the CLI reset is noninteractive: save your current configuration first if needed. If the settings store is unwritable, the command
-reports a persistence failure even though the live DSP change may already have
-taken effect. GUI changes and CLI changes may supersede each other. The commands `on` and `off` control the **global ViPER bypass**;
-`bass-on`, `bass-off`, and `bass-toggle` control only **ViPER Bass**.
-Legacy `all-on`/`all-off` and `toggle` aliases remain accepted for scripts.
+`--reset-effects` command. Unlike the GUI button, the CLI reset is
+noninteractive: save your current configuration first if needed. If the
+settings store is unwritable, the command reports a persistence failure even
+though the live DSP change may already have taken effect. GUI and CLI changes
+may supersede each other.
+
+Use `--on` and `--off` for the global Master bypass; use `--bass on`
+and `--bass off` for ViPER Bass alone. New effect-scoped invocations use
+`--effect option=value`; old value-taking positional forms are not supported
+in this grammar. Some historical no-argument aliases remain for scripts, but
+new commands and automation should use the scoped syntax. All arguments in
+a sequence are prevalidated before editing DSP state; runtime failures after
+an earlier successful edit are not automatically rolled back.
 
 For Headphone Surround+, the CLI uses the **same Level 1 through Level 5**
-numbering shown by the GUI. For instance, `viper4linux-ctl headphone-level 2`
-selects GUI Level 2 (the backend stores index 1). The only supported command
-name is `headphone-level`; the older `headphone-quality` name was retired
-during the CLI cleanup. Invalid values return exit status 2 without changing
-the current level. Use `status` to inspect the live level before and after
-setting it.
+numbering shown by the GUI. For instance, `v4l-cli --headphone level=2` selects GUI Level 2
+(the backend stores index 1). The old `headphone-quality` name was retired.
+Invalid values return exit status 2 without changing the current level.
+Use `v4l-cli --status headphone` to inspect the live level before and
+after setting it.
 
 ## Audio Output memory and preset assignment
 
@@ -197,24 +211,30 @@ importing `.irs` and `.vdc` files, see [Presets and libraries](PRESETS-AND-LIBRA
 
 ## Automating effects with the CLI
 
-`viper4linux-ctl` can toggle every effect group and configure many common
-parameters without starting the GUI. The master `on`/`off` bypass controls
-are distinct from `bass-on`/`bass-off`, and Headphone Surround+ uses the same
-one-based `headphone-level 1..5` as the GUI.
+`v4l-cli` can control all 24 effect groups without starting the GUI.
+The unscoped Master bypass commands are distinct from per-effect `on`/`off`.
+Options inside an effect scope use `name=value`; multiple scopes can be
+combined into a single invocation.
 
 ```sh
-viper4linux-ctl on
-viper4linux-ctl headphone-level 2
-viper4linux-ctl imager-on
-viper4linux-ctl imager-mid 149
+v4l-cli --on --bass on gain=3 freq=65 --headphone on level=2
+v4l-cli --eq bands=31 level=9:-2
+v4l-cli --deq --help
+v4l-cli --imager --help
+v4l-cli --preset save "Before experiments"
+v4l-cli --preset load "Before experiments"
 ```
+To select or import correction files, use `--ddc file=PATH`,
+`--ddc import=PATH`, `--convolver file=PATH`, or
+`--convolver import=PATH`. These standalone preset operations are not
+mixed into effect-setting batches.
 
 The interface applies changes to the **running** backend. An open GUI reflects
 them on its 500 ms polling cycle and saves changed controls. When the GUI is closed, successful CLI changes still save directly to the
 GUI's Qt preferences; they survive a backend restart without reopening the
-GUI. For settings such as a DDC file or convolver impulse response, select
-the file in the GUI or use `--ddc file=PATH` /
-`--convolver file=PATH` (or `import=PATH`) from the CLI.
+GUI. The CLI waits for affected native workers to acknowledge changes, with
+a bounded timeout. A timeout must not be mistaken for confirmed application
+of an effect.
 
 The CLI returns status `0` for a successful command, `1` if no backend is
 running, and `2` for invalid commands or arguments. See

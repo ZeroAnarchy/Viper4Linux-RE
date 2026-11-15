@@ -3,7 +3,8 @@
 All 24 effect groups are routed to the pinned native ViPERDSP implementation.
 Our Linux integration supplies PipeWire, shared-memory commands, file loading,
 GUI state, and worker-thread handoff; it is not a substitute DSP algorithm.
-Three documented downstream patches are listed in [Development](DEVELOPMENT.md).
+Five maintained downstream integration/accuracy patches are listed in
+[Development](DEVELOPMENT.md).
 
 ## Output (3)
 
@@ -63,10 +64,14 @@ rather than displaying a permanent description in the expanded panel.
 | Multiband Compressor | Three or five frequency bands, with one selected band's controls visible at a time. Each band compresses independently. |
 
 The GUI deliberately omits some native **advanced compressor parameters**
-(e.g., automatic timing/knee/gain and adaptation) to avoid clutter. These are
-candidates for a separate Advanced dialog; the missing controls should not
-be described as currently implemented. Most professionally mastered music
-may not benefit from additional compression; both effects default off.
+to avoid clutter. The CLI now exposes FET threshold, ratio, knee, makeup gain,
+attack and release, plus multiband count, crossovers and individual-band
+threshold/ratio/knee/gain/timing controls (`v4l-cli --fet --help` and
+`v4l-cli --mb --help`). Not every upstream internal option is user-exposed:
+automatic adaptation and other DSP internals should not be described as
+available through either interface. A future GUI Advanced dialog could
+surface more of the existing CLI controls. Most professionally mastered
+music may not benefit from additional compression; both effects default off.
 
 ## Sound Correction (3)
 

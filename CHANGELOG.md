@@ -3,6 +3,81 @@
 This file summarizes the user-facing changes in each release. Internal build,
 CI and documentation-only maintenance is generally excluded from these notes.
 
+## v1.2.0
+
+### Added
+
+- **Native CLI and launcher lifecycle controls**
+  ([PR #43](https://github.com/username227/Viper4Linux-RE/pull/43)):
+  The installed `viper4linux` launcher now uses the native controller rather
+  than the previous Python launcher. `v4l-cli --quit-gui` closes only the
+  interface and leaves processing running; `--quit-all` closes the interface
+  and stops ViPER's marked backend; `--restart-backend` restarts the ViPER
+  backend and Audio Output monitor. None of these commands restarts the
+  system PipeWire daemon. Launch preflight remains read-only.
+
+- **Complete named-effect preset management from the CLI**
+  ([PR #43](https://github.com/username227/Viper4Linux-RE/pull/43)):
+  `v4l-cli --preset` lists the GUI's shared preset library; save, explicit
+  overwrite, load, rename and delete operations are available through
+  `--preset ACTION NAME`. A separate `--reset-effects` command restores
+  DSP defaults without deleting named presets or imported IRS/VDC files.
+  The CLI reset is noninteractive; save a preset beforehand if needed.
+
+- **Broader effect-by-effect CLI control**
+  ([PR #33](https://github.com/username227/Viper4Linux-RE/pull/33)
+  and [PR #43](https://github.com/username227/Viper4Linux-RE/pull/43)):
+  Effect-scoped commands cover all 24 DSP effect groups, including detailed
+  FET and Multiband Compressor settings, indexed Dynamic EQ bands, independent
+  10/15/25/31-band Graphic EQ curves, EQ preset operations, and IRS/VDC
+  selection or import. Per-effect help, expanded read-only status and
+  validated multi-effect command sequences make these controls usable
+  without opening the GUI. Physical Audio Output memory and preset
+  assignment continue to use the separate `viper4linux-output` tool.
+
+- **Independent Reset button in the GUI:** Reset Effects to Defaults now
+  has its own footer button with a cancel-first confirmation and a reminder
+  to save the current sound as a named preset. Presets and imported
+  correction files are not deleted.
+
+### Changed
+
+- **Consistent effect-scoped CLI syntax**
+  ([PR #33](https://github.com/username227/Viper4Linux-RE/pull/33)):
+  Use `v4l-cli --bass on gain=3`,
+  `v4l-cli --headphone on level=2`, or
+  `v4l-cli --eq bands=31 level=9:-2`. Commands validate every option in
+  a sequence before applying changes and report the final effect states
+  once. Legacy value-taking positional forms are no longer accepted;
+  documented no-argument aliases remain available for older scripts.
+
+- **Explicit tray exit choices:** The tray menu now distinguishes
+  **Quit GUI & Leave ViperDSP Running** from
+  **Quit GUI & Close ViperDSP Completely**. These actions bypass the
+  remembered interactive exit choice without changing that preference.
+
+- **More accurate and readable GUI audio status**
+  ([PR #45](https://github.com/username227/Viper4Linux-RE/pull/45)):
+  Incoming audio and connection readiness use a green status indicator.
+  When Master effects are bypassed, the GUI shows a separate yellow
+  **effects bypassed** notice instead of implying that DSP effects are
+  processing the detected signal. Light/dark variants improve contrast;
+  signal detection is still not proof of audible speaker output.
+
+### Fixed
+
+- **More reliable Cinnamon/X11 tray and taskbar restoration**
+  ([PR #40](https://github.com/username227/Viper4Linux-RE/pull/40)):
+  Improved startup-notification handling for tray-only launch, restoration
+  of hidden/minimized windows, and native Wayland activation behavior.
+  Platform-specific native Wayland tray/window limitations remain.
+
+- **More reliable CLI state synchronization:** Native worker updates are
+  acknowledged before successful completion is reported, with a bounded
+  timeout. Persisted effect values, GUI readback and preset restoration
+  share the live DSP control state; a runtime failure is reported rather
+  than silently presented as a successful change.
+
 ## v1.1.3
 
 ### Changed

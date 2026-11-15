@@ -138,8 +138,12 @@ The native CLI lifecycle controller starts the DSP backend when necessary, reuse
 running instance, and replaces an outdated one when its backend components
 have changed. It does **not** restart PipeWire itself. The DSP runs separately
 from the GUI, so the window can be minimized or hidden in the tray
-without stopping processing. On actual GUI exit, a prompt offers to keep or
-stop only the ViPER backend; the choice can be remembered in Preferences.
+without stopping processing. On GUI exit, the configured policy can prompt
+to keep or stop the ViPER backend; this choice can be remembered in
+Preferences. The tray also offers explicit GUI-only and complete-DSP exit
+actions without a prompt. For effect controls, the native CLI uses
+`v4l-cli --effect option=value` syntax, such as
+`v4l-cli --bass on gain=3`, and shares complete named presets with the GUI.
 
 See the [user guide](docs/USER-GUIDE.md) for routing, tray settings, and
 troubleshooting, and the [developer guide](docs/DEVELOPMENT.md) for the
