@@ -41,7 +41,7 @@ ViPER4Android alive, so that it still feels like ViPER:
 <details>
 <summary><strong>Effect Presets</strong> — save, load, rename and assign to audio outputs</summary>
 
-<img src="docs/screenshots/effect-presets-modern-teal.png" width="100%" alt="ViPER4Linux-RE Effect Presets dialog in Modern teal theme showing saved effect preset management">
+<img src="docs/screenshots/effect-presets-classic-blue.png" width="100%" alt="ViPER4Linux-RE Effect Presets dialog in Classic Viper theme, showing save, load, rename, delete and Audio Output assignment">
 
 </details>
 
