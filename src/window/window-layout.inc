@@ -19,8 +19,13 @@
                                            deq_editor_->minimumSize()));
         eq_editor_->installEventFilter(this);
         deq_editor_->installEventFilter(this);
+        // Remember maximization as initial window state, without showing the
+        // window or scheduling a second show. A deferred showMaximized() could
+        // override showMinimized() when startup preference is taskbar on Wayland.
+        // Qt permits maximized + minimized together: the window starts iconic
+        // and returns to maximized when the user restores it.
         if (settings_.value("ui/mainWindowMaximized", false).toBool())
-            QTimer::singleShot(0, this, [this]{ showMaximized(); });
+            setWindowState(windowState() | Qt::WindowMaximized);
     }
     static bool runningCinnamon() {
         return qEnvironmentVariable("XDG_CURRENT_DESKTOP").contains("cinnamon", Qt::CaseInsensitive)

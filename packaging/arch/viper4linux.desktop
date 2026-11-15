@@ -6,4 +6,4 @@ Exec=viper4linux
 Icon=viper4linux
 Terminal=false
 Categories=AudioVideo;Audio;
-StartupNotify=true
+StartupNotify=false

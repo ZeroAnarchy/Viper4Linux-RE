@@ -23,6 +23,11 @@
 #include "viper-build-info.h"
 #include "gui-single-instance.h"
 #include "gui-startup-notification.h"
+// Xlib defines Expose as an event-number macro. Remove it before referring
+// to the Qt QEvent::Expose enumerator in the native Wayland startup handler.
+#ifdef Expose
+#undef Expose
+#endif
 #include <QApplication>
 #include <QCoreApplication>
 #include <QAction>
@@ -43,6 +48,7 @@
 #include <QCloseEvent>
 #include <QEvent>
 #include <QWindowStateChangeEvent>
+#include <QWindow>
 #include <QIcon>
 #include <QPixmap>
 #include <QStyleHints>
@@ -611,22 +617,47 @@ public:
     void showAtStartup() {
         const QString choice = settings_.value("ui/startupBehavior", "show").toString();
         if (choice == "tray") {
-            if (trayAvailable()) return; // Tray exists, so the window can stay hidden.
-            show(); // Never hide without a working tray.
-            statusMessage("System tray unavailable; showing the main window instead.");
+            if (trayAvailable()) return; // No delay when the tray is ready.
+            // A login session may launch us before its panel registers a tray.
+            // Give it one more chance, then show the window on tray-less DEs.
+            startup_tray_fallback_pending_ = true;
+            QTimer::singleShot(2000, this, [this] {
+                if (!startup_tray_fallback_pending_) return;
+                startup_tray_fallback_pending_ = false;
+                if (trayAvailable() || isVisible()) return;
+                show();
+                statusMessage("System tray unavailable; showing the main window instead.");
+            });
         } else if (choice == "minimized") {
             // Explicit start-on-taskbar must override the independent
             // minimize-to-tray preference.
             force_taskbar_minimize_ = true;
+            // Native Wayland may discard an initial minimize request before
+            // the compositor maps its xdg_toplevel. If it becomes exposed,
+            // issue the request once more after the first exposure.
+            const bool nativeWayland =
+                QGuiApplication::platformName() == QLatin1String("wayland");
+            wayland_startup_minimize_pending_ = nativeWayland;
+            rememberWaylandTaskbarMinimize();
             showMinimized();
-            QTimer::singleShot(0, this, [this]{ force_taskbar_minimize_ = false; });
+            if (nativeWayland) {
+                if (QWindow* nativeWindow = windowHandle()) {
+                    nativeWindow->installEventFilter(this);
+                    if (nativeWindow->isExposed())
+                        scheduleWaylandStartupMinimizeRetry();
+                }
+            }
         } else {
             show();
         }
     }
 protected:
     void closeEvent(QCloseEvent* event) override {
+        wayland_taskbar_minimize_requested_ = false; // A new close choice supersedes prior minimize.
+        wayland_startup_minimize_pending_ = false; // Explicit close supersedes startup.
+        startup_tray_fallback_pending_ = false; // Explicit close cancels a delayed show.
         const QString choice = settings_.value("ui/closeBehavior", "quit").toString();
+        cancelX11TaskbarRestore(); // Explicit close supersedes an in-flight restore.
         if (choice == "tray") {
             saveUiGeometry();
             if (!trayAvailable()) {
@@ -642,8 +673,8 @@ protected:
             saveUiGeometry();
             event->ignore();
             force_taskbar_minimize_ = true;
+            rememberWaylandTaskbarMinimize();
             showMinimized();
-            QTimer::singleShot(0, this, [this]{ force_taskbar_minimize_ = false; });
             return;
         }
         // Normal X-to-quit and menu/tray Quit share the same backend choice.
@@ -660,6 +691,41 @@ protected:
         const bool was_maximized = is_state_change &&
             static_cast<QWindowStateChangeEvent*>(event)->oldState().testFlag(Qt::WindowMaximized);
         QMainWindow::changeEvent(event);
+        // Wayland has no minimized-state acknowledgement. Recognize a real
+        // taskbar restore when this window is activated again after losing
+        // activation/exposure following one of our minimize requests.
+        if (QGuiApplication::platformName() == QLatin1String("wayland") &&
+            wayland_taskbar_minimize_requested_ &&
+            event->type() == QEvent::ActivationChange &&
+            !wayland_startup_minimize_pending_) {
+            if (!isActiveWindow())
+                wayland_taskbar_saw_inactive_ = true;
+            else if (wayland_taskbar_saw_inactive_ && isVisible() &&
+                     windowHandle() && windowHandle()->isExposed())
+                wayland_taskbar_minimize_requested_ = false;
+        }
+        // Activation is not a sufficient restoration acknowledgment on X11:
+        // Cinnamon may still send a minimized state immediately afterward.
+        // While the explicit taskbar restore is settling, intercept re-iconify
+        // and retry restoration rather than converting it to a tray hide.
+        if (QGuiApplication::platformName() == QLatin1String("xcb") &&
+            x11_taskbar_restore_pending_) {
+            if (is_state_change && isMinimized()) {
+                const quint64 generation = tray_restore_generation_;
+                QTimer::singleShot(0, this, [this, generation] {
+                    retryX11TaskbarRestore(generation);
+                });
+                return;
+            }
+            if ((is_state_change || event->type() == QEvent::ActivationChange) &&
+                isVisible() && !isMinimized()) {
+                scheduleX11TaskbarRestoreSettle();
+            }
+        } else if (QGuiApplication::platformName() == QLatin1String("xcb") &&
+                   event->type() == QEvent::ActivationChange &&
+                   isVisible() && !isMinimized() && isActiveWindow()) {
+            force_taskbar_minimize_ = false;
+        }
         // This handler requires the X11 window-state protocol. Native Wayland
         // cannot notify clients of compositor-side minimization, but an
         // explicitly selected XWayland/xcb GUI can still use this feature.
@@ -669,13 +735,34 @@ protected:
         if (!trayAvailable()) return; // Keep native taskbar behavior without a tray.
         // Deferring until after the WM's minimize event prevents reentrant
         // state changes. Only withdraw the window from the WM; don't remap it.
-        QTimer::singleShot(0, this, [this, was_maximized] {
-            if (!isMinimized() || !isVisible() || !trayAvailable()) return;
+        // A queued hide belongs only to the minimize transition which
+        // scheduled it. Restoring from the tray invalidates older callbacks,
+        // even if Cinnamon has not yet updated the window's minimized state.
+        const quint64 generation = tray_restore_generation_;
+        QTimer::singleShot(0, this, [this, was_maximized, generation] {
+            if (generation != tray_restore_generation_ || force_taskbar_minimize_ ||
+                !isMinimized() || !isVisible() || !trayAvailable()) return;
             tray_restore_maximized_ = was_maximized;
             hide();
         });
     }
     bool eventFilter(QObject* watched, QEvent* event) override {
+        // On Wayland we only retry initial minimization if the compositor
+        // exposed the toplevel instead of keeping the requested taskbar state.
+        if (watched == windowHandle() && event->type() == QEvent::Expose) {
+            if (wayland_startup_minimize_pending_ && windowHandle()->isExposed())
+                scheduleWaylandStartupMinimizeRetry();
+            // When the user reopens a previously minimized Wayland window
+            // using the taskbar, clear our own minimize marker so the next
+            // tray click once again hides a genuinely open window.
+            if (wayland_taskbar_minimize_requested_ &&
+                !wayland_startup_minimize_pending_) {
+                if (!windowHandle()->isExposed())
+                    wayland_taskbar_saw_inactive_ = true;
+                else if (wayland_taskbar_saw_inactive_ && isActiveWindow())
+                    wayland_taskbar_minimize_requested_ = false;
+            }
+        }
         if (event->type() == QEvent::Hide) {
             if (watched == eq_editor_)
                 settings_.setValue("ui/graphicEqEditorSize", eq_editor_->size());
@@ -735,7 +822,17 @@ private:
     QPushButton* audio_restart_button_{};
     QProcess* audio_restart_process_{};
     bool force_taskbar_minimize_ = false;
+    bool startup_tray_fallback_pending_ = false;
+    bool wayland_startup_minimize_pending_ = false;
+    bool wayland_startup_minimize_retry_scheduled_ = false;
+    bool wayland_taskbar_minimize_requested_ = false;
+    bool wayland_taskbar_was_maximized_ = false;
+    bool wayland_taskbar_saw_inactive_ = false;
     bool tray_restore_maximized_ = false;
+    quint64 tray_restore_generation_ = 0;
+    bool x11_taskbar_restore_pending_ = false;
+    int x11_taskbar_restore_retries_ = 0;
+    quint64 x11_taskbar_restore_settle_epoch_ = 0;
     QString theme_muted_color_ = "#536a74";
     QProcess* cinnamon_theme_query_{};
     bool cinnamon_theme_known_ = false;
