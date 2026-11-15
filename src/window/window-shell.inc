@@ -281,7 +281,7 @@
         auto* prefs = menu->addAction("Preferences…");
         connect(prefs, &QAction::triggered, this, [this] { showPreferences(); });
         menu->addSeparator();
-        // Explicit tray choices override the remembered exit policy for this quit only.
+        // Explicit quit-menu choices override the remembered exit policy for this quit only.
         // Escape literal ampersands for QMenu mnemonic handling.
         auto* quitKeep = menu->addAction("Quit GUI && Leave ViperDSP Running");
         connect(quitKeep, &QAction::triggered, this,
@@ -506,7 +506,7 @@
 
         auto* exitBox = new QGroupBox(page);
         auto* exitLayout = configureSection(exitBox, "GUI exit & audio backend", "prefs_backend");
-        exitLayout->addWidget(new QLabel("When quitting via the application menu or close (X):", exitBox));
+        exitLayout->addWidget(new QLabel("When quitting via close (X):", exitBox));
         auto* exitGroup = new QButtonGroup(&dialog);
         auto* exitAsk = new QRadioButton("Ask every time", exitBox);
         auto* exitKeep = new QRadioButton("Keep audio backend running", exitBox);
@@ -521,7 +521,8 @@
         else exitAsk->setChecked(true);
         auto* exitExplanation = new QLabel(
             "The audio backend can continue processing when the GUI is closed. "
-            "Choosing Stop affects only the ViPER audio engine, not PipeWire.",
+            "Choosing Stop affects only the ViPER audio engine, not PipeWire. "
+            "Application and tray menu exit choices override this preference.",
             exitBox);
         exitExplanation->setWordWrap(true);
         exitLayout->addWidget(exitExplanation);
@@ -692,8 +693,14 @@
         auto* about = menu->addAction("About Viper4Linux");
         connect(about, &QAction::triggered, this, [this] { showAbout(); });
         menu->addSeparator();
-        auto* quit = menu->addAction("Quit GUI");
-        connect(quit, &QAction::triggered, this, [this] { quitGui(); });
+        // Match the tray's explicit exit choices; neither changes the saved policy.
+        // Double ampersands display a literal '&' in Qt menu labels.
+        auto* quitKeep = menu->addAction("Quit GUI && Leave ViperDSP Running");
+        connect(quitKeep, &QAction::triggered, this,
+                [this] { quitGui(QStringLiteral("keep")); });
+        auto* quitStop = menu->addAction("Quit GUI && Close ViperDSP Completely");
+        connect(quitStop, &QAction::triggered, this,
+                [this] { quitGui(QStringLiteral("stop")); });
         return menu;
     }
     void showAbout() {
