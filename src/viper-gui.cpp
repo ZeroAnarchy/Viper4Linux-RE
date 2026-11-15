@@ -552,7 +552,7 @@ public:
         actions->addWidget(presetsButton);
 
         // The tabs own all remaining vertical space. Keep this faint divider
-        // pinned immediately above both footer buttons even on short tabs.
+        // pinned immediately above the footer actions even on short tabs.
         // Do not alter the main window size or the footer status placement.
         auto* footerDivider = new QFrame(central);
         footerDivider->setObjectName("viperFooterDivider");
