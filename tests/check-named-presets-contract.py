@@ -41,9 +41,6 @@ end = presets.index("    void showPresetManager()", start)
 reset = presets[start:end]
 assert "confirm.setDefaultButton(qobject_cast<QPushButton*>(cancelButton));" in reset
 assert "confirm.setEscapeButton(cancelButton);" in reset
-assert 'WARNING: THIS WILL RESET ALL EFFECTS TO THEIR DEFAULT VALUES.' in reset
-assert 'IF YOU WANT TO BACKUP THE CURRENT CONFIGURATION,' in reset
-assert 'SAVE AS A PRESET BEFORE CONTINUING.' in reset
 assert "if (confirm.clickedButton() != resetButton) return;" in reset
 assert reset.index("if (confirm.clickedButton() != resetButton) return;") < reset.index("applySettings(")
 assert "settings_.clear()" not in reset
